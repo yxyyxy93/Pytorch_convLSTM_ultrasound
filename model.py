@@ -2,6 +2,10 @@ from convLSTM import ConvLSTMCell  # Import ConvLSTMCell from your file
 import torch
 import torch.nn as nn
 
+__all__ = [
+    "ConvLSTM3DClassifier"
+]
+
 
 class ConvLSTM3DClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dim, kernel_size, output_size):
