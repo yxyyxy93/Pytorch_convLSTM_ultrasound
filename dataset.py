@@ -69,10 +69,6 @@ class TrainValidImageDataset(Dataset):
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
-        # Check for NaN values
-        has_nan = np.isnan(image_noisy).any()
-        print(f"Does the NumPy array contain NaN values? {has_nan}")
-
         # Normalize and add a channel dimension if necessary
         image_noisy = imgproc.normalize_and_add_channel(image_noisy)
         image_origin = imgproc.normalize_and_add_channel(image_origin)
@@ -80,6 +76,8 @@ class TrainValidImageDataset(Dataset):
         # Convert to PyTorch tensors
         noisy_tensor = torch.from_numpy(image_noisy).float()
         origin_tensor = torch.from_numpy(image_origin).float()
+
+        origin_tensor = torch.squeeze(origin_tensor)
 
         return {"gt": origin_tensor, "lr": noisy_tensor}
 

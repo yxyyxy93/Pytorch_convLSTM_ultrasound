@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import config
 import model
-from dataset import CUDAPrefetcher, TrainValidImageDataset
+from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset
 from utils.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
 from utils.criteria import SSIM3D
 
@@ -77,9 +77,11 @@ def main():
     scaler = amp.GradScaler()
 
     # Create an IQA evaluation model
-    ssim_model = SSIM3D(config.upscale_factor, config.only_test_y_channel)
+    ssim_model = SSIM3D()
     # Transfer the IQA model to the specified device
     ssim_model = ssim_model.to(device=config.device)
+
+    best_ssim = 0
 
     for epoch in range(start_epoch, config.epochs):
         train(convLSTM_model,
@@ -111,11 +113,11 @@ def main():
                          "ema_state_dict": ema_convLSTM_model.state_dict(),
                          "optimizer": optimizer.state_dict(),
                          "scheduler": scheduler.state_dict()},
-                        file_name=f"g_epoch_{epoch + 1}.pth.tar",
+                        file_name=f"d_epoch_{epoch + 1}.pth.tar",
                         samples_dir=None,
                         results_dir=results_dir,
-                        best_file_name="g_best.pth.tar",
-                        last_file_name="g_last.pth.tar",
+                        best_file_name="d_best.pth.tar",
+                        last_file_name="d_last.pth.tar",
                         is_best=is_best,
                         is_last=is_last
                         )
@@ -123,9 +125,9 @@ def main():
 
 def load_dataset() -> [CUDAPrefetcher, CUDAPrefetcher]:
     # Load train, test and valid datasets
-    train_datasets = TrainValidImageDataset(config.label_dir,
-                                            config.image_dir,
-                                            "Train")
+    train_datasets = TrainValidImageDataset(image_dir=config.image_dir,
+                                            label_dir=config.label_dir,
+                                            mode=config.mode)
 
     # Generator all dataloader
     train_dataloader = DataLoader(train_datasets,
@@ -137,7 +139,8 @@ def load_dataset() -> [CUDAPrefetcher, CUDAPrefetcher]:
                                   persistent_workers=True)
 
     # Place all data on the preprocessing data loader
-    train_prefetcher = CUDAPrefetcher(train_dataloader, config.device)
+    # train_prefetcher = CUDAPrefetcher(train_dataloader, config.device)
+    train_prefetcher = CPUPrefetcher(train_dataloader)
 
     # reserve, to be modified after ....
     test_prefetcher = train_prefetcher
@@ -189,7 +192,7 @@ def define_scheduler(optimizer) -> lr_scheduler.StepLR:
 
 def train(
         train_model: nn.Module,
-        ema_rrdbnet_model: nn.Module,
+        ema_convLSTM_model: nn.Module,
         train_prefetcher: CUDAPrefetcher,
         criterion: nn.MSELoss,
         optimizer: optim.Adam,
@@ -241,7 +244,7 @@ def train(
         scaler.update()
 
         # Update EMA
-        ema_rrdbnet_model.update_parameters(train_model)
+        ema_convLSTM_model.update_parameters(train_model)
 
         # Statistical loss value for terminal data output
         losses.update(loss.item(), lr.size(0))

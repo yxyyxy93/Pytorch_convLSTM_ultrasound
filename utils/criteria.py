@@ -10,7 +10,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-import imgproc
+from utils import imgproc
 
 __all__ = [
     "ssim",
@@ -189,7 +189,7 @@ class SSIM3D(nn.Module):
     """
     PyTorch class for SSIM calculation on 3D image tensors.
     """
-    def __init__(self, crop_border: int, window_size: int = 11, gaussian_sigma: float = 1.5) -> None:
+    def __init__(self, crop_border: int = 21, window_size: int = 11, gaussian_sigma: float = 1.5) -> None:
         super().__init__()
         self.crop_border = crop_border
         self.window_size = window_size

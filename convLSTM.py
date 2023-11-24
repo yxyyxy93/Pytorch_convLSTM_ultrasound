@@ -60,7 +60,7 @@ class ConvLSTMCell(nn.Module):
         height, width = image_size
         init_h = torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device)
         init_c = torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device)
-        return (init_h, init_c)
+        return init_h, init_c
 
 
 class ConvLSTM(nn.Module):

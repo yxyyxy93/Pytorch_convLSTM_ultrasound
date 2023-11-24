@@ -11,19 +11,22 @@ from torch.backends import cudnn
 random.seed(0)
 torch.manual_seed(0)
 np.random.seed(0)
-# Use GPU for training by default
-device = torch.device("cuda", 0)
-# Turning on when the image size does not change during training can speed up training
-cudnn.benchmark = True
+# # Use GPU for training by default
+# device = torch.device("cuda", 0)
+# # Turning on when the image size does not change during training can speed up training
+# cudnn.benchmark = True
+
+# Use CPU for training
+device = torch.device("cpu")
 
 # Model arch config
-input_dim = 21
-hidden_dim = 10
-kernel_size = 3
-output_size = (50, 50, 200)  #
+input_dim = 1
+hidden_dim = 1
+kernel_size = (3, 3)
+output_size = (50, 50, 168)  #
 
 # Current configuration parameter method
-mode = "train_convLSTM"
+mode = "train"
 # mode = "test"
 
 # Experiment name, easy to save weights and log files
@@ -32,16 +35,11 @@ exp_name = "convLSTM_baseline"
 
 g_arch_name = "ConvLSTM3DClassifier"
 
-# When evaluating the performance of the SR model, whether to verify only the Y channel image data
-only_test_y_channel = True
-# Image magnification factor
-upscale_factor = 1
-
 # How many iterations to print the training result
 train_print_frequency = 5
 valid_print_frequency = 5
 
-if mode == "train_convLSTM":
+if mode == "train":
     # Dataset address
     image_dir = r'D:\python_work\ConvLSTM_3dultrasound\dataset\sim_data'  # path to the 'sim_data' directory
     label_dir = r'D:\python_work\ConvLSTM_3dultrasound\dataset\sim_struct'  # path to the 'sim_struct' directory

@@ -25,7 +25,7 @@ class ConvLSTM3DClassifier(nn.Module):
 
     def forward(self, x):
         device = x.device
-        b, t, h, w = x.size()  # batch size, time steps, height, width
+        b, t, _, h, w = x.size()  # batch size, time steps, height, width
         h_t, c_t = self.init_hidden_state(b, h, w, device)  # Initialize hidden state
 
         # Process each time step
