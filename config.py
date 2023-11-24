@@ -31,7 +31,6 @@ mode = "train"
 
 # Experiment name, easy to save weights and log files
 exp_name = "convLSTM_baseline"
-# exp_name = "SRGan_baseline"
 
 g_arch_name = "ConvLSTM3DClassifier"
 
@@ -44,7 +43,7 @@ if mode == "train":
     image_dir = r'D:\python_work\ConvLSTM_3dultrasound\dataset\sim_data'  # path to the 'sim_data' directory
     label_dir = r'D:\python_work\ConvLSTM_3dultrasound\dataset\sim_struct'  # path to the 'sim_struct' directory
 
-    batch_size = 4
+    batch_size = 2
     num_workers = 4
 
     # The address to load the pretrained model
@@ -78,12 +77,11 @@ if mode == "train":
     lr_scheduler_gamma = 0.5
 
 if mode == "test":
-    # Test data address
+    # Test data address To be modified ...
     lr_dir = f"./data/ImageTest/noisy_images"
     sr_dir = f"./results/test/{exp_name}"
     hr_dir = f"./data/ImageTest/origin_images"
 
     # model_path = r"F:\Xiayang\python_work\SRGAN-PyTorch-ultrasonic\samples\SRResNet_baseline/g_epoch_100.pth.tar"
     # model_path = r".\results\ESRGAN_x2\g_best.pth.tar"
-    model_path = r".\results\RRDBNet_x1\g_last.pth.tar"
     # model_path = r"F:\Xiayang\python_work\SRGAN-PyTorch-ultrasonic\samples\SRGan_baseline\g_epoch_100.pth.tar"

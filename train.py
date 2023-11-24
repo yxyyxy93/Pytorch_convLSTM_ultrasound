@@ -82,7 +82,6 @@ def main():
     ssim_model = ssim_model.to(device=config.device)
 
     best_ssim = 0
-
     for epoch in range(start_epoch, config.epochs):
         train(convLSTM_model,
               ema_convLSTM_model,
@@ -267,7 +266,7 @@ def train(
 
 
 def validate(
-        rrdbnet_model: nn.Module,
+        train_model: nn.Module,
         data_prefetcher: CUDAPrefetcher,
         epoch: int,
         writer: SummaryWriter,
@@ -280,7 +279,7 @@ def validate(
     progress = ProgressMeter(len(data_prefetcher), [batch_time, ssimes], prefix=f"{mode}: ")
 
     # Put the adversarial network model in validation mode
-    rrdbnet_model.eval()
+    train_model.eval()
 
     # Initialize the number of data batches to print logs on the terminal
     batch_index = 0
@@ -300,9 +299,11 @@ def validate(
 
             # Use the generator model to generate a fake sample
             with amp.autocast():
-                sr = rrdbnet_model(lr)
+                sr = train_model(lr)
 
             # Statistical loss value for terminal data output
+            print(sr.size())
+            print(gt.size())
             ssim = ssim_3d(sr, gt)
             ssimes.update(ssim.item(), lr.size(0))
 

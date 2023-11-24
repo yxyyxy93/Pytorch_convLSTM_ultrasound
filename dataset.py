@@ -7,7 +7,6 @@ import os
 import queue
 import threading
 
-import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 
