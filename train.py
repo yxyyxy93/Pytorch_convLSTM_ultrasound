@@ -10,15 +10,18 @@ from torch import nn
 from torch import optim
 from torch.cuda import amp
 from torch.optim import lr_scheduler
+from torch.optim.lr_scheduler import MultiStepLR
 from torch.optim.swa_utils import AveragedModel
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 import config
 import model
-from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset
+from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset, show_dataset_info
 from utils.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
 from utils.criteria import SSIM3D
+import json
+import datetime
 
 model_names = sorted(
     name for name in model.__dict__ if
@@ -31,19 +34,16 @@ def main():
 
     train_prefetcher, test_prefetcher = load_dataset()
     print("Load all datasets successfully.")
-
+    # after the DataLoader is initialized
+    show_dataset_info(train_prefetcher, show_sample_slices=True)
     convLSTM_model, ema_convLSTM_model = build_model()
-    print(f"Build `{config.g_arch_name}` model successfully.")
-
+    print(f"Build `{config.d_arch_name}` model successfully.")
     criterion = define_loss()
     print("Define all loss functions successfully.")
-
     optimizer = define_optimizer(convLSTM_model)
     print("Define all optimizer functions successfully.")
-
     scheduler = define_scheduler(optimizer)
     print("Define all optimizer scheduler functions successfully.")
-
     print("Check whether to load pretrained model weights...")
     if config.pretrained_d_model_weights_path:
         convLSTM_model = load_state_dict(convLSTM_model, config.pretrained_d_model_weights_path)
@@ -65,13 +65,13 @@ def main():
         print("Resume training model not found. Start training from scratch.")
 
     # Create a experiment results
-    samples_dir = os.path.join("samples", config.exp_name)
-    results_dir = os.path.join("results", config.exp_name)
+    samples_dir = os.path.join("../samples", config.exp_name)
+    results_dir = os.path.join("../results", config.exp_name)
     make_directory(samples_dir)
     make_directory(results_dir)
 
     # Create training process log file
-    writer = SummaryWriter(os.path.join("samples", "logs", config.exp_name))
+    writer = SummaryWriter(os.path.join("../samples", "logs", config.exp_name))
 
     # Initialize the gradient scaler
     scaler = amp.GradScaler()
@@ -81,31 +81,59 @@ def main():
     # Transfer the IQA model to the specified device
     ssim_model = ssim_model.to(device=config.device)
 
+    # Initialize lists to store metrics for each epoch
     best_ssim = 0
+    epoch_train_losses = []
+    epoch_val_losses = []
+    epoch_train_ssim_scores = []
+    epoch_val_ssim_scores = []
+    # Get current date
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+
     for epoch in range(start_epoch, config.epochs):
-        train(convLSTM_model,
-              ema_convLSTM_model,
-              train_prefetcher,
-              criterion,
-              optimizer,
-              epoch,
-              scaler,
-              writer)
-        ssim = validate(convLSTM_model,
-                        test_prefetcher,
-                        epoch,
-                        writer,
-                        ssim_model,
-                        "Test")
+        avg_train_loss, avg_train_ssim = train(convLSTM_model,
+                                               ema_convLSTM_model,
+                                               train_prefetcher,
+                                               criterion,
+                                               optimizer,
+                                               epoch,
+                                               scaler,
+                                               writer,
+                                               ssim_model)  # Pass the SSIM model to train
+        avg_val_loss, avg_val_ssim = validate(convLSTM_model,
+                                              test_prefetcher,
+                                              epoch,
+                                              writer,
+                                              criterion,  # Pass the loss criterion to validate
+                                              ssim_model,
+                                              "Test")
+
+        # After train and validate calls
+        # Save the training and validation metrics
+        epoch_train_losses.append(avg_train_loss)
+        epoch_train_ssim_scores.append(avg_train_ssim)
+        epoch_val_losses.append(avg_val_loss)
+        epoch_val_ssim_scores.append(avg_val_ssim)
+
+        metrics = {
+            "train_losses": epoch_train_losses,
+            "train_ssim_scores": epoch_train_ssim_scores,
+            "val_losses": epoch_val_losses,
+            "val_ssim_scores": epoch_val_ssim_scores
+        }
+        # Save to a JSON file
+        results_file = os.path.join(results_dir, f'training_metrics_{current_date}.json')
+        with open(results_file, 'w') as f:
+            json.dump(metrics, f)
         print("\n")
 
         # Update LR
         scheduler.step()
 
         # Automatically save the model with the highest index
-        is_best = ssim > best_ssim
+        is_best = avg_val_ssim > best_ssim
         is_last = (epoch + 1) == config.epochs
-        best_ssim = max(ssim, best_ssim)
+        best_ssim = max(avg_val_ssim, best_ssim)
         save_checkpoint({"epoch": epoch + 1,
                          "best_ssim": best_ssim,
                          "state_dict": convLSTM_model.state_dict(),
@@ -113,7 +141,7 @@ def main():
                          "optimizer": optimizer.state_dict(),
                          "scheduler": scheduler.state_dict()},
                         file_name=f"d_epoch_{epoch + 1}.pth.tar",
-                        samples_dir=None,
+                        samples_dir="",
                         results_dir=results_dir,
                         best_file_name="d_best.pth.tar",
                         last_file_name="d_last.pth.tar",
@@ -148,7 +176,7 @@ def load_dataset() -> [CUDAPrefetcher, CUDAPrefetcher]:
 
 
 def build_model() -> [nn.Module, nn.Module]:
-    convLSTM_model = model.__dict__[config.g_arch_name](input_dim=config.input_dim,
+    convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
                                                         hidden_dim=config.hidden_dim,
                                                         kernel_size=config.kernel_size,
                                                         output_size=config.output_size)
@@ -181,10 +209,10 @@ def define_optimizer(model_train) -> optim.Adam:
     return optimizer
 
 
-def define_scheduler(optimizer) -> lr_scheduler.StepLR:
-    scheduler = lr_scheduler.StepLR(optimizer,
-                                    config.lr_scheduler_milestones,
-                                    config.lr_scheduler_gamma)
+def define_scheduler(optimizer) -> MultiStepLR:
+    scheduler = lr_scheduler.MultiStepLR(optimizer=optimizer,
+                                         milestones=config.lr_scheduler_milestones,
+                                         gamma=config.lr_scheduler_gamma)
 
     return scheduler
 
@@ -197,140 +225,105 @@ def train(
         optimizer: optim.Adam,
         epoch: int,
         scaler: amp.GradScaler,
-        writer: SummaryWriter
-) -> None:
-    # Calculate how many batches of data are in each Epoch
+        writer: SummaryWriter,
+        ssim_3d: any  # Add the SSIM computation function
+) -> (float, float):  # Change return type to include both loss and SSIM
     batches = len(train_prefetcher)
-    # Print information of progress bar during training
     batch_time = AverageMeter("Time", ":6.3f")
     data_time = AverageMeter("Data", ":6.3f")
     losses = AverageMeter("Loss", ":6.6f")
-    progress = ProgressMeter(batches, [batch_time, data_time, losses], prefix=f"Epoch: [{epoch + 1}]")
+    ssimes = AverageMeter("SSIM", ":6.6f")  # New meter for SSIM
+    progress = ProgressMeter(batches, [batch_time, data_time, losses, ssimes], prefix=f"Epoch: [{epoch + 1}]")
 
-    # Put the generative network model in training mode
     train_model.train()
-
-    # Initialize the number of data batches to print logs on the terminal
     batch_index = 0
-
-    # Initialize the data loader and load the first batch of data
     train_prefetcher.reset()
     batch_data = train_prefetcher.next()
-
-    # Get the initialization training time
     end = time.time()
 
     while batch_data is not None:
-        # Calculate the time it takes to load a batch of data
         data_time.update(time.time() - end)
-
-        # Transfer in-memory data to CUDA devices to speed up training
         gt = batch_data["gt"].to(device=config.device, non_blocking=True)
         lr = batch_data["lr"].to(device=config.device, non_blocking=True)
-
-        # Initialize generator gradients
         train_model.zero_grad(set_to_none=True)
 
-        # Mixed precision training
         with amp.autocast():
             sr = train_model(lr)
             loss = criterion(sr, gt)
+            ssim = ssim_3d(sr, gt)  # Compute SSIM
 
-        # Backpropagation
         scaler.scale(loss).backward()
-        # update generator weights
         scaler.step(optimizer)
         scaler.update()
-
-        # Update EMA
         ema_convLSTM_model.update_parameters(train_model)
 
-        # Statistical loss value for terminal data output
         losses.update(loss.item(), lr.size(0))
+        ssimes.update(ssim.item(), lr.size(0))  # Update SSIM meter
 
-        # Calculate the time it takes to fully train a batch of data
         batch_time.update(time.time() - end)
         end = time.time()
 
-        # Write the data during training to the training log file
         if batch_index % config.train_print_frequency == 0:
-            # Record loss during training and output to file
             writer.add_scalar("Train/Loss", loss.item(), batch_index + epoch * batches + 1)
+            writer.add_scalar("Train/SSIM", ssim.item(), batch_index + epoch * batches + 1)  # Log SSIM
             progress.display(batch_index + 1)
 
-        # Preload the next batch of data
         batch_data = train_prefetcher.next()
-
-        # Add 1 to the number of data batches to ensure that the terminal prints data normally
         batch_index += 1
+
+    avg_loss = losses.avg
+    avg_ssim = ssimes.avg  # Calculate average SSIM
+    return avg_loss, avg_ssim  # Return both average loss and SSIM
 
 
 def validate(
-        train_model: nn.Module,
+        validate_model: nn.Module,
         data_prefetcher: CUDAPrefetcher,
         epoch: int,
         writer: SummaryWriter,
+        criterion: nn.MSELoss,  # Add criterion for loss computation
         ssim_3d: any,
         mode: str
-) -> [float, float]:
-    # Calculate how many batches of data are in each Epoch
+) -> (float, float):  # Change return type to include both loss and SSIM
     batch_time = AverageMeter("Time", ":6.3f")
-    ssimes = AverageMeter("SSIM", ":4.4f")
-    progress = ProgressMeter(len(data_prefetcher), [batch_time, ssimes], prefix=f"{mode}: ")
+    losses = AverageMeter("Loss", ":6.6f")  # New meter for loss
+    ssimes = AverageMeter("SSIM", ":6.6f")
+    progress = ProgressMeter(len(data_prefetcher), [batch_time, losses, ssimes], prefix=f"{mode}: ")
 
-    # Put the adversarial network model in validation mode
-    train_model.eval()
-
-    # Initialize the number of data batches to print logs on the terminal
+    validate_model.eval()
     batch_index = 0
-
-    # Initialize the data loader and load the first batch of data
     data_prefetcher.reset()
     batch_data = data_prefetcher.next()
-
-    # Get the initialization test time
     end = time.time()
 
     with torch.no_grad():
         while batch_data is not None:
-            # Transfer the in-memory data to the CUDA device to speed up the test
             gt = batch_data["gt"].to(device=config.device, non_blocking=True)
             lr = batch_data["lr"].to(device=config.device, non_blocking=True)
 
-            # Use the generator model to generate a fake sample
             with amp.autocast():
-                sr = train_model(lr)
+                sr = validate_model(lr)
+                loss = criterion(sr, gt)  # Compute loss
+                ssim = ssim_3d(sr, gt)  # Compute SSIM
 
-            # Statistical loss value for terminal data output
-            print(sr.size())
-            print(gt.size())
-            ssim = ssim_3d(sr, gt)
+            losses.update(loss.item(), lr.size(0))  # Update loss meter
             ssimes.update(ssim.item(), lr.size(0))
 
-            # Calculate the time it takes to fully test a batch of data
             batch_time.update(time.time() - end)
             end = time.time()
 
-            # Record training log information
             if batch_index % config.valid_print_frequency == 0:
+                writer.add_scalar(f"{mode}/Loss", loss.item(), epoch + 1)  # Log loss
+                writer.add_scalar(f"{mode}/SSIM", ssim.item(), epoch + 1)
                 progress.display(batch_index + 1)
 
-            # Preload the next batch of data
             batch_data = data_prefetcher.next()
-
-            # After training a batch of data, add 1 to the number of data batches to ensure that the
-            # terminal print data normally
             batch_index += 1
 
-    # print metrics
     progress.display_summary()
-
-    if mode == "Valid" or mode == "Test":
-        writer.add_scalar(f"{mode}/SSIM", ssimes.avg, epoch + 1)
-    else:
-        raise ValueError("Unsupported mode, please use `Valid` or `Test`.")
-
-    return ssimes.avg
+    avg_loss = losses.avg
+    avg_ssim = ssimes.avg  # Calculate average SSIM
+    return avg_loss, avg_ssim  # Return both average loss and SSIM
 
 
 if __name__ == "__main__":
