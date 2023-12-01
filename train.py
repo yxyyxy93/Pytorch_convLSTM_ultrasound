@@ -12,7 +12,7 @@ from torch.cuda import amp
 from torch.optim import lr_scheduler
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.optim.swa_utils import AveragedModel
-from torch.utils.data import DataLoader, Subset, random_split
+from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 
 import config
@@ -180,13 +180,15 @@ def load_dataset(num_folds=5) -> list:
         train_loader = DataLoader(train_subset, batch_size=config.batch_size, shuffle=True,
                                   num_workers=config.num_workers, pin_memory=True, drop_last=True,
                                   persistent_workers=True)
-        val_loader = DataLoader(val_subset, batch_size=config.batch_size, shuffle=False, num_workers=config.num_workers,
+        val_loader = DataLoader(val_subset, batch_size=1, shuffle=False, num_workers=config.num_workers,
                                 pin_memory=True, drop_last=True, persistent_workers=True)
-
-        # Optionally use CPUPrefetch or CUDAPrefetcher
-        train_prefetcher = CPUPrefetcher(train_loader)
-        val_prefetcher = CPUPrefetcher(val_loader)
-
+        # Now you can check if 'device' is set to "cpu"
+        if config.device == torch.device("cpu"):
+            train_prefetcher = CPUPrefetcher(train_loader)
+            val_prefetcher = CPUPrefetcher(val_loader)
+        else:
+            train_prefetcher = CUDAPrefetcher(train_loader, config.device)
+            val_prefetcher = CUDAPrefetcher(val_loader, config.device)
         dataloaders_per_fold.append((train_prefetcher, val_prefetcher))
 
     return dataloaders_per_fold

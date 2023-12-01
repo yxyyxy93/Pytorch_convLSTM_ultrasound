@@ -252,10 +252,16 @@ class CUDAPrefetcher:
         return self
 
     def __next__(self):
-        torch.cuda.current_stream().wait_stream(self.stream)
-        batch_data = self.batch_data
-        self.preload()
-        return batch_data
+        try:
+            torch.cuda.current_stream().wait_stream(self.stream)
+            batch_data = self.batch_data
+            self.preload()
+            return batch_data
+        except StopIteration:
+            # Reinitialize the iterator and stop the iteration
+            self.data = iter(self.dataloader)
+            raise StopIteration
+
 
     def reset(self):
         self.data = iter(self.original_dataloader)

@@ -13,23 +13,20 @@ import os
 random.seed(0)
 torch.manual_seed(0)
 np.random.seed(0)
-# # Use GPU for training by default
-# device = torch.device("cuda", 0)
-# # Turning on when the image size does not change during training can speed up training
-# cudnn.benchmark = True
 
-# Use CPU for training
-device = torch.device("cpu")
+# Check if a CUDA-enabled GPU is available
+if torch.cuda.is_available():
+    device = torch.device("cuda", 0)
+    # Turning on when the image size does not change during training can speed up training
+    torch.backends.cudnn.benchmark = True
+else:
+    device = torch.device("cpu")
 
 # Model arch config
 input_dim = 1
 hidden_dim = 1
 kernel_size = (3, 3)
 output_size = (50, 50, 168)  #
-
-# Current configuration parameter method
-mode = "train"
-# mode = "test"
 
 # Experiment name, easy to save weights and log files
 exp_name = "convLSTM_baseline"
@@ -46,8 +43,8 @@ mode = os.getenv('MODE', 'train')  # Default to 'train' if not set
 
 if mode == "train":
     # Dataset address
-    image_dir = r'D:\python_work\ConvLSTM_3dultrasound\dataset\sim_data'  # path to the 'sim_data' directory
-    label_dir = r'D:\python_work\ConvLSTM_3dultrasound\dataset\sim_struct'  # path to the 'sim_struct' directory
+    image_dir = r'.\dataset\sim_data'  # path to the 'sim_data' directory
+    label_dir = r'.\dataset\sim_struct'  # path to the 'sim_struct' directory
 
     batch_size = 2
     num_workers = 2

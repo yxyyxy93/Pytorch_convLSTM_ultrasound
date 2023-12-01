@@ -1,5 +1,7 @@
 *.csv
 dataset/
+*.yml
+env/
 
 ## PyTorch
 
