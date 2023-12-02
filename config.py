@@ -7,20 +7,29 @@ import numpy as np
 import torch
 import os
 
-# from torch.backends import cudnn
+def show_cuda_gpu_info():
+    print("Checking CUDA and GPU status...")
 
+    if torch.cuda.is_available():
+        print("CUDA is available.")
+        device = torch.device("cuda", 0)
+        torch.backends.cudnn.benchmark = True
+        print(f"Number of GPUs Available: {torch.cuda.device_count()}")
+        for i in range(torch.cuda.device_count()):
+            print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
+    else:
+        print("CUDA is not available. Using CPU.")
+        device = torch.device("cpu")
+
+    return device
+
+# from torch.backends import cudnn
 # Random seed to maintain reproducible results
 random.seed(0)
 torch.manual_seed(0)
 np.random.seed(0)
 
-# Check if a CUDA-enabled GPU is available
-if torch.cuda.is_available():
-    device = torch.device("cuda", 0)
-    # Turning on when the image size does not change during training can speed up training
-    torch.backends.cudnn.benchmark = True
-else:
-    device = torch.device("cpu")
+device = show_cuda_gpu_info()
 
 # Model arch config
 input_dim = 1

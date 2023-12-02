@@ -199,7 +199,7 @@ def build_model() -> [nn.Module, nn.Module]:
                                                         hidden_dim=config.hidden_dim,
                                                         kernel_size=config.kernel_size,
                                                         output_size=config.output_size)
-
+    
     convLSTM_model = convLSTM_model.to(device=config.device)
 
     # Create an Exponential Moving Average Model

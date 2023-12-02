@@ -240,8 +240,7 @@ class CUDAPrefetcher:
         try:
             self.batch_data = next(self.data)
         except StopIteration:
-            self.batch_data = None
-            return None
+            raise StopIteration
 
         with torch.cuda.stream(self.stream):
             for k, v in self.batch_data.items():
@@ -252,23 +251,10 @@ class CUDAPrefetcher:
         return self
 
     def __next__(self):
-        try:
-            torch.cuda.current_stream().wait_stream(self.stream)
-            batch_data = self.batch_data
-            self.preload()
-            return batch_data
-        except StopIteration:
-            # Reinitialize the iterator and stop the iteration
-            self.data = iter(self.dataloader)
-            raise StopIteration
-
-
-    def reset(self):
-        self.data = iter(self.original_dataloader)
+        torch.cuda.current_stream().wait_stream(self.stream)
+        batch_data = self.batch_data
         self.preload()
-
-    def __len__(self) -> int:
-        return len(self.original_dataloader)
+        return batch_data
 
 
 def show_dataset_info(data_loader, show_sample_slices=False):
