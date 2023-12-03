@@ -49,7 +49,7 @@ class TrainValidImageDataset(Dataset):
             dataset_path = os.path.join(self.image_dir, subdir)
             label_path = os.path.join(self.label_dir, subdir)
             # Get all dataset and label files in the subdirectory
-            dataset_files = [f for f in os.listdir(dataset_path) if f.endswith('.csv')]
+            dataset_files = [f for f in os.listdir(dataset_path) if f.endswith('.00.csv')]
             label_file = [f for f in os.listdir(label_path) if f.startswith('structure')]
             # Map each dataset file to its corresponding label file
             for dataset_file in dataset_files:
@@ -105,7 +105,7 @@ class TestDataset(Dataset):
 
     def _create_dataset_label_mapping(self):
         mapping = {}
-        dataset_files = [f for f in os.listdir(self.image_dir) if f.endswith('.00.csv')]
+        dataset_files = [f for f in os.listdir(self.image_dir) if f.endswith('.csv')]
         label_files = [f for f in os.listdir(self.label_dir) if f.startswith('structure')]
 
         # Map each dataset file to its corresponding label file
@@ -218,6 +218,7 @@ class CPUPrefetcher:
         return len(self.dataloader)
 
 
+
 class CUDAPrefetcher:
     """Use the CUDA side to accelerate data reading.
 
@@ -254,6 +255,12 @@ class CUDAPrefetcher:
         batch_data = self.batch_data
         self.preload()
         return batch_data
+
+    def reset(self):
+        self.data = iter(self.original_dataloader)
+
+    def __len__(self) -> int:
+        return len(self.original_dataloader)
 
 
 def show_dataset_info(data_loader, show_sample_slices=False):
