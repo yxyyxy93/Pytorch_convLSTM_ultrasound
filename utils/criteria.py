@@ -4,6 +4,11 @@ import torch.nn.functional as F
 import numpy as np
 import cv2
 
+__all__ = [
+    "SSIM3D",
+    "DiceLoss"
+]
+
 
 def _check_tensor_shape(raw_tensor: torch.Tensor, dst_tensor: torch.Tensor):
     """Check if the dimensions of the two tensors are the same"""
@@ -75,7 +80,6 @@ class SSIM3D(nn.Module):
         self.gaussian_kernel_window = np.outer(self.gaussian_kernel_window, gaussian_kernel.reshape(-1)).reshape(
             window_size, window_size, window_size)
 
-
     def forward(self, raw_tensor: torch.Tensor, dst_tensor: torch.Tensor) -> torch.Tensor:
         batch_size, height, width, length = raw_tensor.size()
         ssim_scores = []
@@ -98,3 +102,40 @@ class SSIM3D(nn.Module):
             average_ssim = average_ssim.mean()
 
         return average_ssim
+
+
+# -------------- loss functions
+class DiceLoss(nn.Module):
+    def __init__(self):
+        super(DiceLoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1):
+        # Flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+
+        intersection = (inputs * targets).sum()
+        dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
+
+        return 1 - dice
+
+
+class IoU(nn.Module):
+    def __init__(self, smooth=1e-6):
+        super(IoU, self).__init__()
+        self.smooth = smooth
+
+    def forward(self, inputs, targets):
+        # Flatten label and prediction tensors
+        inputs = inputs.view(-1)
+        targets = targets.view(-1)
+
+        # Intersection and union
+        intersection = (inputs * targets).sum()
+        total = (inputs + targets).sum()
+        union = total - intersection
+
+        # IoU calculation
+        iou = (intersection + self.smooth) / (union + self.smooth)
+
+        return iou

@@ -75,17 +75,12 @@ def make_directory(dir_path: str) -> None:
 
 def save_checkpoint(
         state_dict: dict,
-        file_name: str,
-        samples_dir: str,
         results_dir: str,
         best_file_name: str,
         last_file_name: str,
         is_best: bool = False,
         is_last: bool = False,
 ) -> None:
-    if samples_dir:
-        checkpoint_path = os.path.join(samples_dir, file_name)
-        torch.save(state_dict, checkpoint_path)
 
     if is_best:
         torch.save(state_dict, os.path.join(results_dir, best_file_name))

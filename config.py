@@ -38,25 +38,33 @@ hidden_dim = 1
 kernel_size = (3, 3)
 output_size = (50, 50, 168)  #
 
-# Experiment name, easy to save weights and log files
-exp_name = "convLSTM_baseline"
-
+# ------------- choose from models
 d_arch_name = "ConvLSTM3DClassifier"
+# d_arch_name = "ConvLSTM3DTransposedConv"
+
+# ---------- choose from loss functions
+loss_function = "DiceLoss"  # Options: "DiceLoss", "IoU", "SSIM3D", etc.
+val_function = "IoU"
+
+# Experiment name, easy to save weights and log files
+exp_name = d_arch_name + "_baseline"
 
 # How many iterations to print the training result
-train_print_frequency = 5
-valid_print_frequency = 5
+train_print_frequency = 10
+valid_print_frequency = 10
 
 # Initialize mode as None
-mode = None
-mode = os.getenv('MODE', 'train')  # Default to 'train' if not set
+# MODE = "train"
+# MODE = os.getenv('MODE', 'train')  # Default to 'train' if not set
+mode = os.environ.get('MODE')
 
 if mode == "train":
+    print("train mode")
     # Dataset address
     image_dir = r'.\dataset\sim_data'  # path to the 'sim_data' directory
     label_dir = r'.\dataset\sim_struct'  # path to the 'sim_struct' directory
 
-    batch_size = 2
+    batch_size = 4
     num_workers = 2
 
     # The address to load the pretrained model
@@ -64,15 +72,13 @@ if mode == "train":
 
     # The address to load the pretrained model
     pretrained_d_model_weights_path = ""
-
     # Incremental training and migration training
     resume_d_model_weights_path = f""
-
     # Incremental training and migration training
     resume = ""
 
     # Total num epochs
-    epochs = 10
+    epochs = 50
 
     # Optimizer parameter
     model_lr = 1e-3
@@ -89,8 +95,13 @@ if mode == "train":
     lr_scheduler_milestones = [int(epochs * 0.125), int(epochs * 0.250), int(epochs * 0.500), int(epochs * 0.750)]
     lr_scheduler_gamma = 0.1
 elif mode == "test":
+    print("testing mode")
     # Test data address To be modified ...
-    image_dir = r'D:\python_work\ConvLSTM_3dultrasound\dataset\sim_data'  # path to the 'sim_data' directory
-    label_dir = r'D:\python_work\ConvLSTM_3dultrasound\dataset\sim_struct'  # path to the 'sim_struct' directory
+    image_dir = r'.\dataset\sim_data'  # path to the 'sim_data' directory
+    label_dir = r'.\dataset\sim_struct'  # path to the 'sim_struct' directory
 
-    model_path = r"D:\python_work\ConvLSTM_3dultrasound\results\convLSTM_baseline\d_best.pth.tar"
+    fold_number = 1  # Change as needed
+    model_filename = "d_best.pth.tar"
+    # Constructing the path
+    model_path = os.path.join("results", f"{exp_name}", f"_fold {fold_number}", model_filename)
+    print(model_path)

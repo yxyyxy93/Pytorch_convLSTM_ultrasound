@@ -49,7 +49,7 @@ class TrainValidImageDataset(Dataset):
             dataset_path = os.path.join(self.image_dir, subdir)
             label_path = os.path.join(self.label_dir, subdir)
             # Get all dataset and label files in the subdirectory
-            dataset_files = [f for f in os.listdir(dataset_path) if f.endswith('.00.csv')]
+            dataset_files = [f for f in os.listdir(dataset_path) if f.endswith('.csv')]
             label_file = [f for f in os.listdir(label_path) if f.startswith('structure')]
             # Map each dataset file to its corresponding label file
             for dataset_file in dataset_files:
@@ -89,32 +89,32 @@ class TrainValidImageDataset(Dataset):
 class TestDataset(Dataset):
     """
     Define test dataset loading methods.
-
     Args:
         image_dir (str): Test dataset directory.
         label_dir (str): Directory where the corresponding labels are stored.
     """
-
     def __init__(self, image_dir: str, label_dir: str) -> None:
         super(TestDataset, self).__init__()
         self.image_dir = image_dir
         self.label_dir = label_dir
-
-        # Create a mapping from dataset files to label files
+        # Get all subdirectories in the image directory
+        self.subdirs = [d for d in os.listdir(image_dir) if os.path.isdir(os.path.join(image_dir, d))]
         self.dataset_label_mapping = self._create_dataset_label_mapping()
 
     def _create_dataset_label_mapping(self):
         mapping = {}
-        dataset_files = [f for f in os.listdir(self.image_dir) if f.endswith('.csv')]
-        label_files = [f for f in os.listdir(self.label_dir) if f.startswith('structure')]
-
-        # Map each dataset file to its corresponding label file
-        for dataset_file in dataset_files:
-            full_dataset_file = os.path.join(self.image_dir, dataset_file)
-            # Assuming corresponding label file has the same name in label directory
-            full_label_file = os.path.join(self.label_dir, dataset_file.replace('.00.csv', '_structure.csv'))
-            mapping[full_dataset_file] = full_label_file
-
+        # Iterate through each subdirectory
+        for subdir in self.subdirs:
+            dataset_path = os.path.join(self.image_dir, subdir)
+            label_path = os.path.join(self.label_dir, subdir)
+            # Get all dataset and label files in the subdirectory
+            dataset_files = [f for f in os.listdir(dataset_path) if f.endswith('.csv')]
+            label_files = [f for f in os.listdir(label_path) if f.startswith('structure')]
+            # Map each dataset file to its corresponding label file
+            for dataset_file in dataset_files:
+                full_dataset_file = os.path.join(dataset_path, dataset_file)
+                full_label_file = os.path.join(label_path, label_files[0])  # Adjust as needed
+                mapping[full_dataset_file] = full_label_file
         return mapping
 
     def __getitem__(self, index: int) -> [torch.Tensor, torch.Tensor]:
@@ -122,9 +122,8 @@ class TestDataset(Dataset):
         label_file = self.dataset_label_mapping[dataset_file]
 
         # Load the images
-        image_noisy = imgproc.read_csv_to_3d_array(dataset_file)
-        image_origin = imgproc.read_csv_to_3d_array(label_file)
-
+        image_noisy = read_csv_to_3d_array(dataset_file)
+        image_origin = read_csv_to_3d_array(label_file)
         # Normalize and add a channel dimension if necessary
         image_noisy = imgproc.normalize_and_add_channel(image_noisy)
         image_origin = imgproc.normalize_and_add_channel(image_origin)
@@ -132,9 +131,7 @@ class TestDataset(Dataset):
         # Convert to PyTorch tensors
         noisy_tensor = torch.from_numpy(image_noisy).float()
         origin_tensor = torch.from_numpy(image_origin).float()
-
         origin_tensor = torch.squeeze(origin_tensor)
-
         return {"gt": origin_tensor, "lr": noisy_tensor}
 
     def __len__(self) -> int:

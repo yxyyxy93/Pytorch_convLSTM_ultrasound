@@ -15,11 +15,14 @@ from torch.optim.swa_utils import AveragedModel
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 
+# Set mode for training
+os.environ['MODE'] = 'train'
 import config
+
 import model
 from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset
 from utils.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
-from utils.criteria import SSIM3D
+from utils import criteria
 import json
 import datetime
 
@@ -40,7 +43,17 @@ def main():
         # show_dataset_info(train_prefetcher, show_sample_slices=False)
         convLSTM_model, ema_convLSTM_model = build_model()
         print(f"Build `{config.d_arch_name}` model successfully.")
-        criterion = define_loss()
+
+        # define loss functions
+        # criterion = nn.MSELoss()
+        # Dynamically get the loss function class based on the string name
+        LossClass = getattr(criteria, config.loss_function)
+        criterion = LossClass()
+        criterion = criterion.to(device=config.device)
+        LossClass = getattr(criteria, config.loss_function)
+        val_crite = LossClass()
+        val_crite = val_crite.to(device=config.device)
+
         print("Define all loss functions successfully.")
         optimizer = define_optimizer(convLSTM_model)
         print("Define all optimizer functions successfully.")
@@ -78,20 +91,15 @@ def main():
         # Initialize the gradient scaler
         scaler = amp.GradScaler()
 
-        # Create an IQA evaluation model
-        ssim_model = SSIM3D()
-        # Transfer the IQA model to the specified device
-        ssim_model = ssim_model.to(device=config.device)
-
         # Initialize lists to store metrics for each epoch
-        best_ssim = 0
+        best_score = 0
         epoch_train_losses = []
         epoch_val_losses = []
-        epoch_train_ssim_scores = []
-        epoch_val_ssim_scores = []
+        epoch_train_scores = []
+        epoch_val_scores = []
 
         for epoch in range(start_epoch, config.epochs):
-            avg_train_loss, avg_train_ssim = train(convLSTM_model,
+            avg_train_loss, avg_train_score = train(convLSTM_model,
                                                    ema_convLSTM_model,
                                                    train_prefetcher,
                                                    criterion,
@@ -99,27 +107,27 @@ def main():
                                                    epoch,
                                                    scaler,
                                                    writer,
-                                                   ssim_model)  # Pass the SSIM model to train
-            avg_val_loss, avg_val_ssim = validate(convLSTM_model,
+                                                   val_crite)  # Pass the SSIM model to train
+            avg_val_loss, avg_val_score = validate(convLSTM_model,
                                                   val_prefetcher,
                                                   epoch,
                                                   writer,
                                                   criterion,  # Pass the loss criterion to validate
-                                                  ssim_model,
+                                                  val_crite,
                                                   "Val")
 
             # After train and validate calls
             # Save the training and validation metrics
             epoch_train_losses.append(avg_train_loss)
-            epoch_train_ssim_scores.append(avg_train_ssim)
+            epoch_train_scores.append(avg_train_score)
             epoch_val_losses.append(avg_val_loss)
-            epoch_val_ssim_scores.append(avg_val_ssim)
+            epoch_val_scores.append(avg_val_score)
 
             metrics = {
                 "train_losses": epoch_train_losses,
-                "train_ssim_scores": epoch_train_ssim_scores,
+                "train_scores": epoch_train_scores,
                 "val_losses": epoch_val_losses,
-                "val_ssim_scores": epoch_val_ssim_scores
+                "val_scores": epoch_val_scores
             }
             # Save to a JSON file
             results_file = os.path.join(results_dir, f'training_metrics.json')
@@ -131,17 +139,15 @@ def main():
             scheduler.step()
 
             # Automatically save the model with the highest index
-            is_best = avg_val_ssim > best_ssim
+            is_best = avg_val_score > best_score
             is_last = (epoch + 1) == config.epochs
-            best_ssim = max(avg_val_ssim, best_ssim)
+            best_score = max(avg_val_score, best_score)
             save_checkpoint({"epoch": epoch + 1,
-                             "best_ssim": best_ssim,
+                             "best_score": best_score,
                              "state_dict": convLSTM_model.state_dict(),
                              "ema_state_dict": ema_convLSTM_model.state_dict(),
                              "optimizer": optimizer.state_dict(),
                              "scheduler": scheduler.state_dict()},
-                            file_name=f"d_epoch_{epoch + 1}.pth.tar",
-                            samples_dir="",
                             results_dir=results_dir,
                             best_file_name="d_best.pth.tar",
                             last_file_name="d_last.pth.tar",
@@ -198,7 +204,7 @@ def build_model() -> [nn.Module, nn.Module]:
                                                         hidden_dim=config.hidden_dim,
                                                         kernel_size=config.kernel_size,
                                                         output_size=config.output_size)
-    
+
     convLSTM_model = convLSTM_model.to(device=config.device)
 
     # Create an Exponential Moving Average Model
@@ -244,14 +250,14 @@ def train(
         epoch: int,
         scaler: amp.GradScaler,
         writer: SummaryWriter,
-        ssim_3d: any  # Add the SSIM computation function
+        val_crite: any  # Add the SSIM computation function
 ) -> (float, float):  # Change return type to include both loss and SSIM
     batches = len(train_prefetcher)
     batch_time = AverageMeter("Time", ":6.3f")
     data_time = AverageMeter("Data", ":6.3f")
     losses = AverageMeter("Loss", ":6.6f")
-    ssimes = AverageMeter("SSIM", ":6.6f")  # New meter for SSIM
-    progress = ProgressMeter(batches, [batch_time, data_time, losses, ssimes], prefix=f"Epoch: [{epoch + 1}]")
+    scores = AverageMeter("Score", ":6.6f")  # New meter for SSIM
+    progress = ProgressMeter(batches, [batch_time, data_time, losses, scores], prefix=f"Epoch: [{epoch + 1}]")
 
     train_model.train()
     train_prefetcher.reset()
@@ -266,7 +272,7 @@ def train(
         with amp.autocast():
             sr = train_model(lr)
             loss = criterion(sr, gt)
-            ssim = ssim_3d(sr, gt)  # Compute SSIM
+            score = val_crite(sr, gt)  # Compute SSIM
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -274,18 +280,18 @@ def train(
         ema_convLSTM_model.update_parameters(train_model)
 
         losses.update(loss.item(), lr.size(0))
-        ssimes.update(ssim.item(), lr.size(0))  # Update SSIM meter
+        scores.update(score.item(), lr.size(0))  # Update SSIM meter
 
         batch_time.update(time.time() - end)
         end = time.time()
 
         if batch_index % config.train_print_frequency == 0:
             writer.add_scalar("Train/Loss", loss.item(), batch_index + epoch * batches + 1)
-            writer.add_scalar("Train/SSIM", ssim.item(), batch_index + epoch * batches + 1)  # Log SSIM
+            writer.add_scalar("Train/SSIM", score.item(), batch_index + epoch * batches + 1)  # Log SSIM
             progress.display(batch_index + 1)
 
     avg_loss = losses.avg
-    avg_ssim = ssimes.avg  # Calculate average SSIM
+    avg_ssim = scores.avg  # Calculate average SSIM
     return avg_loss, avg_ssim  # Return both average loss and SSIM
 
 
@@ -295,13 +301,13 @@ def validate(
         epoch: int,
         writer: SummaryWriter,
         criterion: nn.MSELoss,  # Add criterion for loss computation
-        ssim_3d: any,
+        val_crite: any,
         mode: str
 ) -> (float, float):  # Change return type to include both loss and SSIM
     batch_time = AverageMeter("Time", ":6.3f")
     losses = AverageMeter("Loss", ":6.6f")  # New meter for loss
-    ssimes = AverageMeter("SSIM", ":6.6f")
-    progress = ProgressMeter(len(data_prefetcher), [batch_time, losses, ssimes], prefix=f"{mode}: ")
+    scores = AverageMeter("Score", ":6.6f")
+    progress = ProgressMeter(len(data_prefetcher), [batch_time, losses, scores], prefix=f"{mode}: ")
 
     validate_model.eval()
     data_prefetcher.reset()
@@ -315,22 +321,22 @@ def validate(
             with amp.autocast():
                 sr = validate_model(lr)
                 loss = criterion(sr, gt)  # Compute loss
-                ssim = ssim_3d(sr, gt)  # Compute SSIM
+                score = val_crite(sr, gt)  # Compute SSIM
 
             losses.update(loss.item(), lr.size(0))  # Update loss meter
-            ssimes.update(ssim.item(), lr.size(0))
+            scores.update(score.item(), lr.size(0))
 
             batch_time.update(time.time() - end)
             end = time.time()
 
             if batch_index % config.valid_print_frequency == 0:
                 writer.add_scalar(f"{mode}/Loss", loss.item(), epoch + 1)  # Log loss
-                writer.add_scalar(f"{mode}/SSIM", ssim.item(), epoch + 1)
+                writer.add_scalar(f"{mode}/SSIM", score.item(), epoch + 1)
                 progress.display(batch_index + 1)
 
     progress.display_summary()
     avg_loss = losses.avg
-    avg_ssim = ssimes.avg  # Calculate average SSIM
+    avg_ssim = scores.avg  # Calculate average SSIM
     return avg_loss, avg_ssim  # Return both average loss and SSIM
 
 
