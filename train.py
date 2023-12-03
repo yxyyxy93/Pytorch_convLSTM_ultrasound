@@ -17,7 +17,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import config
 import model
-from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset, show_dataset_info
+from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset
 from utils.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
 from utils.criteria import SSIM3D
 import json
@@ -66,14 +66,14 @@ def main():
         else:
             print("Resume training model not found. Start training from scratch.")
 
+        # Get current date
+        current_date = datetime.datetime.now().strftime("%Y-%m-%d")
         # Create a experiment results
-        samples_dir = os.path.join("samples", config.exp_name, f"_fold {fold + 1}")
-        results_dir = os.path.join("results", config.exp_name, f"_fold {fold + 1}")
-        make_directory(samples_dir)
+        results_dir = os.path.join("results", f"{config.exp_name}_{current_date}", f"_fold {fold + 1}")
         make_directory(results_dir)
 
         # Create training process log file
-        writer = SummaryWriter(os.path.join("samples", "logs", config.exp_name))
+        writer = SummaryWriter(os.path.join("logs", config.exp_name))
 
         # Initialize the gradient scaler
         scaler = amp.GradScaler()
@@ -89,8 +89,6 @@ def main():
         epoch_val_losses = []
         epoch_train_ssim_scores = []
         epoch_val_ssim_scores = []
-        # Get current date
-        current_date = datetime.datetime.now().strftime("%Y-%m-%d")
 
         for epoch in range(start_epoch, config.epochs):
             avg_train_loss, avg_train_ssim = train(convLSTM_model,
@@ -124,7 +122,7 @@ def main():
                 "val_ssim_scores": epoch_val_ssim_scores
             }
             # Save to a JSON file
-            results_file = os.path.join(results_dir, f'training_metrics_{current_date}.json')
+            results_file = os.path.join(results_dir, f'training_metrics.json')
             with open(results_file, 'w') as f:
                 json.dump(metrics, f)
             print("\n")
@@ -150,6 +148,7 @@ def main():
                             is_best=is_best,
                             is_last=is_last
                             )
+
         print(f"Completed training on fold {fold + 1}")
 
 

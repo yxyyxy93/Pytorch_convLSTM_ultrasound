@@ -36,7 +36,7 @@ if __name__ == "__main__":
     source_directory = r'D:\pogo_work\results_mat\test_woven_[#090]_8'
 
     # Define the file types you are looking for
-    filetypes = ['.00.csv']
+    filetypes = ['origin.csv', 'amplitude.csv', 'phase.csv']
 
     # Define the destination directory where files will be copied
     destination_directory = r'D:\python_work\ConvLSTM_3dultrasound\dataset'

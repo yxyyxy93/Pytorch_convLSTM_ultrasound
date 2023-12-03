@@ -49,7 +49,7 @@ class TrainValidImageDataset(Dataset):
             dataset_path = os.path.join(self.image_dir, subdir)
             label_path = os.path.join(self.label_dir, subdir)
             # Get all dataset and label files in the subdirectory
-            dataset_files = [f for f in os.listdir(dataset_path) if f.endswith('.00.csv')]
+            dataset_files = [f for f in os.listdir(dataset_path) if f.endswith('.csv')]
             label_file = [f for f in os.listdir(label_path) if f.startswith('structure')]
             # Map each dataset file to its corresponding label file
             for dataset_file in dataset_files:
@@ -216,7 +216,6 @@ class CPUPrefetcher:
 
     def __len__(self) -> int:
         return len(self.dataloader)
-
 
 
 class CUDAPrefetcher:

@@ -1,4 +1,3 @@
-import os
 import numpy as np
 
 
@@ -73,6 +72,7 @@ if __name__ == "__main__":
                 destination_directory = label_dir
             elif file.startswith('exp'):
                 destination_directory = exp_dir
+                subfolder_number = file[0:-4]  # keep original name for exp.
             else:
                 continue  # Skip files that do not match the criteria
 

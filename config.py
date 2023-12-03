@@ -7,21 +7,22 @@ import numpy as np
 import torch
 import os
 
+
 def show_cuda_gpu_info():
     print("Checking CUDA and GPU status...")
-
     if torch.cuda.is_available():
         print("CUDA is available.")
-        device = torch.device("cuda", 0)
+        device_use = torch.device("cuda", 0)
         torch.backends.cudnn.benchmark = True
         print(f"Number of GPUs Available: {torch.cuda.device_count()}")
         for i in range(torch.cuda.device_count()):
             print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
     else:
         print("CUDA is not available. Using CPU.")
-        device = torch.device("cpu")
+        device_use = torch.device("cpu")
 
-    return device
+    return device_use
+
 
 # from torch.backends import cudnn
 # Random seed to maintain reproducible results
