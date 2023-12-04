@@ -87,7 +87,7 @@ def main():
         writer = SummaryWriter(os.path.join("logs", config.exp_name))
 
         # Initialize the gradient scaler
-        scaler = amp.GradScaler()
+        scaler = amp.GradScaler(enabled=torch.cuda.is_available())
 
         # Initialize lists to store metrics for each epoch
         best_score = 0
@@ -216,8 +216,7 @@ def build_model() -> [nn.Module, nn.Module]:
 def define_loss() -> nn.MSELoss:
     criterion = nn.MSELoss()
     criterion = criterion.to(
-        device=config.device)  # Assuming 'config.device' is defined and specifies the device (e.g., 'cuda' or 'cpu')
-
+        device=config.device)
     return criterion
 
 
@@ -266,6 +265,9 @@ def train(
         gt = batch_data["gt"].to(device=config.device, non_blocking=True)
         lr = batch_data["lr"].to(device=config.device, non_blocking=True)
         train_model.zero_grad(set_to_none=True)
+
+        print("Model device:", next(train_model.parameters()).device)
+        print("Input tensor device:", lr.device)
 
         with amp.autocast():
             output = train_model(lr)
