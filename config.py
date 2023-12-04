@@ -35,7 +35,8 @@ device = show_cuda_gpu_info()
 input_dim = 1
 hidden_dim = 32
 kernel_size = (3, 3)
-output_size = (50, 50, 168)  #
+output_dim = 2  # 2 or more classes
+output_tl = 168  # the depth length
 num_layers = 3
 
 # ------------- choose from models
@@ -79,7 +80,7 @@ if mode == "train":
     epochs = 50
 
     # Optimizer parameter
-    model_lr = 5e-3
+    model_lr = 1e-2
     model_betas = (0.9, 0.99)
     model_eps = 1e-8
     model_weight_decay = 1e-5  # weight decay (e.g., 1e-4 or 1e-5) can be beneficial as it adds L2 regularization.

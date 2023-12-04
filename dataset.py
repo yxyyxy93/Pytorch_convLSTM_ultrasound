@@ -77,6 +77,7 @@ class TrainValidImageDataset(Dataset):
         image_noisy = imgproc.normalize_and_add_channel(image_noisy)
 
         image_origin = image_origin - image_origin.min()  # to 0, 1, 2...
+        image_origin = np.where((image_origin == 1) | (image_origin == 2), 1, image_origin)  # change to 2 classes !
         image_origin = imgproc.resample_3d_array_numpy(image_origin, new_shape)
 
         # Convert to PyTorch tensors
@@ -137,6 +138,7 @@ class TestDataset(Dataset):
         image_noisy = imgproc.normalize_and_add_channel(image_noisy)
 
         image_origin = image_origin - image_origin.min()  # to 0, 1, 2...
+        image_origin = np.where((image_origin == 1) | (image_origin == 2), 1, image_origin)  # change to 2 classes !
         image_origin = imgproc.resample_3d_array_numpy(image_origin, new_shape)
 
         # Convert to PyTorch tensors

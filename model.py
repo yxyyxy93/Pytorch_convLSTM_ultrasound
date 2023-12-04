@@ -91,7 +91,7 @@ class ConvLSTM(nn.Module):
         >> h = last_states[0][0]  # 0 for layer index, 0 for h index
     """
 
-    def __init__(self, input_dim, hidden_dim, kernel_size=(3, 3), num_layers=2,
+    def __init__(self, input_dim, hidden_dim, output_dim, output_tl, kernel_size=(3, 3), num_layers=2,
                  batch_first=True, bias=True):
         super(ConvLSTM, self).__init__()
 
@@ -105,6 +105,8 @@ class ConvLSTM(nn.Module):
 
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
+        self.output_tl = output_tl
         self.kernel_size = kernel_size
         self.num_layers = num_layers  # Define transposed convolution layers for spatial upsampling
         # # Upsample layer to increase dimension from 21 to 42
@@ -115,7 +117,7 @@ class ConvLSTM(nn.Module):
         # self.upsample_to_50 = nn.Upsample(size=(50, 50), mode='bilinear', align_corners=False)
 
         # Update the final convolution layer for 3-class output
-        self.final_conv = nn.Conv2d(in_channels=hidden_dim[0], out_channels=3, kernel_size=1)
+        self.final_conv = nn.Conv2d(in_channels=hidden_dim[0], out_channels=output_dim, kernel_size=1)
 
         self.batch_first = batch_first
         self.bias = bias
@@ -183,20 +185,17 @@ class ConvLSTM(nn.Module):
         final_outputs = []
         for layer_idx, layer_output in enumerate(layer_output_list):
             # layer_output has shape [B, T, C, H, W]
-
-            # Downsample the time dimension from 261 to 168
+            # Downsample the time dimension  to output_tl
             total_time_steps = layer_output.size(1)
-            selected_indices = torch.linspace(0, total_time_steps - 1, 168).long()
+            selected_indices = torch.linspace(0, total_time_steps - 1, self.output_tl).long()
             sampled_output = layer_output[:, selected_indices, ...]
 
             if layer_idx == self.num_layers - 1:
-                # For the last layer, reduce the channel dimension from 32 to 3
+                # For the last layer, reduce the channel dimension to output_dim
                 B, T, C, H, W = sampled_output.shape
-                sampled_output = sampled_output.view(B * T, C, H,
-                                                     W)  # Flatten temporal dimension for batch-wise processing
+                sampled_output = sampled_output.view(B * T, C, H, W)  # Flatten temporal dimension for batch-wise processing
                 sampled_output = self.final_conv(sampled_output)  # Apply 1x1 convolution
-                sampled_output = sampled_output.view(B, T, 3, H,
-                                                     W)  # Reshape back to original format with reduced channels
+                sampled_output = sampled_output.view(B, T, self.output_dim, H, W)  # Reshape back to original format with reduced channels
 
             final_outputs.append(sampled_output)
 
@@ -292,7 +291,7 @@ if __name__ == "__main__":
     import visualization
 
     # Initialize model
-    convLSTM_model = ConvLSTM(input_dim=1, hidden_dim=32, kernel_size=(3, 3), num_layers=5)
+    convLSTM_model = ConvLSTM(input_dim=1, hidden_dim=32, output_dim=2, output_tl=168, kernel_size=(3, 3), num_layers=5)
 
     # Prepare test dataset
     test_loader = test.load_test_dataset()

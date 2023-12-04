@@ -199,6 +199,8 @@ def build_model() -> [nn.Module, nn.Module]:
     convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
                                                         hidden_dim=config.hidden_dim,
                                                         kernel_size=config.kernel_size,
+                                                        output_dim=config.output_dim,
+                                                        output_tl=config.output_tl,
                                                         num_layers=config.num_layers)
 
     convLSTM_model = convLSTM_model.to(device=config.device)
