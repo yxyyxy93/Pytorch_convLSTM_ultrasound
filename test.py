@@ -69,6 +69,3 @@ def main():
 
     print(f"Test evaluation completed. Results saved to {results_file}")
 
-
-if __name__ == "__main__":
-    main()

@@ -16,8 +16,9 @@ from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 import json
 import datetime
+import atexit
 
-from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset
+from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset, show_dataset_info
 from utils.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
 from utils import criteria
 
@@ -40,7 +41,7 @@ def main():
         # Initialize the number of training epochs
         start_epoch = 0
         print("Load all datasets successfully.")
-        # show_dataset_info(train_prefetcher, show_sample_slices=False)
+        # show_dataset_info(train_prefetcher, show_sample_slices=True)
         convLSTM_model, ema_convLSTM_model = build_model()
         print(f"Build `{config.d_arch_name}` model successfully.")
 
@@ -49,7 +50,6 @@ def main():
         criterion = criterion.to(device=config.device)
         val_crite = getattr(criteria, config.val_function)()
         val_crite = val_crite.to(device=config.device)
-
         print("Define all loss functions successfully.")
         optimizer = define_optimizer(convLSTM_model)
         print("Define all optimizer functions successfully.")
@@ -259,11 +259,8 @@ def train(
 
         with amp.autocast():
             output = train_model(lr)
-            sr = output[2]
-            sr = sr.reshape(-1, 3, 50, 50)  # Reshape to [168, 3, 50, 50]
-            gt = gt.permute(3, 1, 2, 0).reshape(-1, 50, 50)
+            sr = output[1]
             gt = gt.long()  # Ensure ground truth is of type long
-
             loss = criterion(sr, gt)
             score = val_crite(sr, gt)  # Compute
 
@@ -313,10 +310,7 @@ def validate(
 
             with amp.autocast():
                 output = validate_model(lr)
-                sr = output[2]
-                sr = sr.reshape(-1, 3, 50, 50)  # Reshape to [168, 3, 50, 50]
-                gt = gt.permute(3, 1, 2, 0).reshape(-1, 50, 50)
-                gt = gt.long()  # Ensure ground truth is of type long
+                sr = output[1]
                 loss = criterion(sr, gt)  # Compute loss
                 score = val_crite(sr, gt)  # Compute
 
@@ -337,5 +331,13 @@ def validate(
     return avg_loss, avg_score  # Return both average loss and SSIM
 
 
+# Function to release GPU resources
+def cleanup():
+    torch.cuda.empty_cache()
+
+
 if __name__ == "__main__":
     main()
+
+    # Register the cleanup function to be called at program exit
+    atexit.register(cleanup)

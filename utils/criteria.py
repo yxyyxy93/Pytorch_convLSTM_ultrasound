@@ -184,7 +184,11 @@ class myCrossEntropyLoss(nn.Module):
                                                  reduction=reduction)
 
     def forward(self, input_tensor, target):
-        return self.cross_entropy(input_tensor, target)
+        # Permute the input tensor to shape [B, C, T, H, W]
+        input_permuted = input_tensor.permute(0, 2, 1, 3, 4)
+
+        return self.cross_entropy(input_permuted, target)
+
 
 
 class PixelAccuracy(nn.Module):

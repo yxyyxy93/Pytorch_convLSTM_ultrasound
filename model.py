@@ -1,7 +1,6 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
-# import test
 
 __all__ = [
     "ConvLSTM"
@@ -108,12 +107,13 @@ class ConvLSTM(nn.Module):
         self.hidden_dim = hidden_dim
         self.kernel_size = kernel_size
         self.num_layers = num_layers  # Define transposed convolution layers for spatial upsampling
-        # Upsample layer to increase dimension from 21 to 42
-        self.upsample_conv1 = nn.ConvTranspose2d(in_channels=hidden_dim[0],
-                                                 out_channels=hidden_dim[0],
-                                                 kernel_size=4, stride=2, padding=1)
-        # Upsampling to exact 50x50 dimensions
-        self.upsample_to_50 = nn.Upsample(size=(50, 50), mode='bilinear', align_corners=False)
+        # # Upsample layer to increase dimension from 21 to 42
+        # self.upsample_conv1 = nn.ConvTranspose2d(in_channels=hidden_dim[0],
+        #                                          out_channels=hidden_dim[0],
+        #                                          kernel_size=4, stride=2, padding=1)
+        # # Upsampling to exact 50x50 dimensions
+        # self.upsample_to_50 = nn.Upsample(size=(50, 50), mode='bilinear', align_corners=False)
+
         # Update the final convolution layer for 3-class output
         self.final_conv = nn.Conv2d(in_channels=hidden_dim[0], out_channels=3, kernel_size=1)
 
@@ -179,25 +179,31 @@ class ConvLSTM(nn.Module):
 
             last_state_list = last_state_list[-1:]
 
-        # Process for spatial upsampling
-        upsampled_output_list = []
-        for t in range(seq_len):
-            upsampled_t = self.upsample_conv1(layer_output_list[-1][:, t, :, :, :])  # Upsample to 42x42
-            # Upsample to exact 50x50 dimensions
-            upsampled_t = self.upsample_to_50(upsampled_t)
-            upsampled_output_list.append(upsampled_t)
+        # Process each layer's output
+        final_outputs = []
+        for layer_idx, layer_output in enumerate(layer_output_list):
+            # layer_output has shape [B, T, C, H, W]
 
-        # Select representative subset of time steps for output
-        # Assuming to downsample to 168 time steps from 261
-        selected_indices = torch.linspace(0, len(upsampled_output_list) - 1, 168).long()
-        upsampled_output = torch.stack([upsampled_output_list[i] for i in selected_indices], dim=1)
+            # Downsample the time dimension from 261 to 168
+            total_time_steps = layer_output.size(1)
+            selected_indices = torch.linspace(0, total_time_steps - 1, 168).long()
+            sampled_output = layer_output[:, selected_indices, ...]
 
-        # Final convolutional layer for 3-class output
-        upsampled_output = upsampled_output.view(-1, *upsampled_output.shape[2:])  # Flatten for batch and time steps
-        class_output = self.final_conv(upsampled_output)
-        class_output = class_output.view(b, 168, *class_output.shape[1:])  # Reshape to include time steps
+            if layer_idx == self.num_layers - 1:
+                # For the last layer, reduce the channel dimension from 32 to 3
+                B, T, C, H, W = sampled_output.shape
+                sampled_output = sampled_output.view(B * T, C, H,
+                                                     W)  # Flatten temporal dimension for batch-wise processing
+                sampled_output = self.final_conv(sampled_output)  # Apply 1x1 convolution
+                sampled_output = sampled_output.view(B, T, 3, H,
+                                                     W)  # Reshape back to original format with reduced channels
 
-        return layer_output_list, last_state_list, class_output
+            final_outputs.append(sampled_output)
+
+        # Use the output of the last layer as the final output
+        final_output = final_outputs[-1]
+
+        return last_state_list, final_output
 
     def _init_hidden(self, batch_size, image_size):
         """
@@ -240,7 +246,7 @@ def test_model_output(model, input_tensor, ground_truth):
     :param ground_truth: The ground truth data for comparison.
     """
     # Forward pass
-    _, _, output = model(input_tensor)
+    _, output = model(input_tensor)
 
     # Check the size of the output
     print("Model Output Size:", output.shape)
@@ -277,17 +283,30 @@ def test_model_output(model, input_tensor, ground_truth):
     else:
         print("Invalid classes found in Ground Truth.")
 
+    return output
 
-# # Example usage
-# if __name__ == "__main__":
-#     # Initialize model
-#     convLSTM_model = ConvLSTM(input_dim=1, hidden_dim=32, kernel_size=(3, 3), num_layers=5)
-#
-#     # Prepare test dataset
-#     test_loader = test.load_test_dataset()
-#     for data in test_loader:
-#         input_data = data['lr']
-#         gt = data['gt']
-#         test_model_output(convLSTM_model, input_data, gt)
-#
-#         break
+
+# Example usage
+if __name__ == "__main__":
+    import test # for debug
+    import visualization
+    # Initialize model
+    convLSTM_model = ConvLSTM(input_dim=1, hidden_dim=32, kernel_size=(3, 3), num_layers=5)
+
+    # Prepare test dataset
+    test_loader = test.load_test_dataset()
+    for data in test_loader:
+        input_data = data['lr']
+        gt = data['gt']
+
+        output = test_model_output(convLSTM_model, input_data, gt)
+
+        gt = gt.squeeze()
+        output = output.squeeze()
+        # Apply argmax along the class dimension (c)
+        sr_3d = torch.argmax(output, dim=1)
+        print(gt.shape)
+        print(sr_3d.shape)
+        visualization.visualize_sample(gt, sr_3d, title="Ground Truth vs Output", slice_idx=(84, 10, 10))
+
+        break

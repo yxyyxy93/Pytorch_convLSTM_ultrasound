@@ -7,6 +7,7 @@ import os
 import queue
 import threading
 import matplotlib.pyplot as plt
+import numpy as np
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -70,9 +71,13 @@ class TrainValidImageDataset(Dataset):
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
+        new_shape = image_noisy.shape
+
         # Normalize and add a channel dimension if necessary
         image_noisy = imgproc.normalize_and_add_channel(image_noisy)
-        image_origin = imgproc.normalize_and_add_channel(image_origin)
+
+        image_origin = image_origin - image_origin.min()  # to 0, 1, 2...
+        image_origin = imgproc.resample_3d_array_numpy(image_origin, new_shape)
 
         # Convert to PyTorch tensors
         noisy_tensor = torch.from_numpy(image_noisy).float()
@@ -125,14 +130,21 @@ class TestDataset(Dataset):
         # Load the images
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
+
+        new_shape = image_noisy.shape
+
         # Normalize and add a channel dimension if necessary
         image_noisy = imgproc.normalize_and_add_channel(image_noisy)
-        image_origin = image_origin - image_origin.min()
+
+        image_origin = image_origin - image_origin.min()  # to 0, 1, 2...
+        image_origin = imgproc.resample_3d_array_numpy(image_origin, new_shape)
 
         # Convert to PyTorch tensors
         noisy_tensor = torch.from_numpy(image_noisy).float()
         origin_tensor = torch.from_numpy(image_origin).float()
+
         origin_tensor = torch.squeeze(origin_tensor)
+
         return {"gt": origin_tensor, "lr": noisy_tensor}
 
     def __len__(self) -> int:

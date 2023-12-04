@@ -11,7 +11,7 @@ import os
 def show_cuda_gpu_info():
     if torch.cuda.is_available():
         print("CUDA is available.")
-        device_use = torch.device("cuda", 0)
+        device_use = torch.device("cuda", 3)
         torch.backends.cudnn.benchmark = True
         print(f"Number of GPUs Available: {torch.cuda.device_count()}")
         for i in range(torch.cuda.device_count()):
@@ -33,10 +33,10 @@ device = show_cuda_gpu_info()
 
 # Model arch config
 input_dim = 1
-hidden_dim = 64
+hidden_dim = 32
 kernel_size = (3, 3)
 output_size = (50, 50, 168)  #
-num_layers = 2
+num_layers = 5
 
 # ------------- choose from models
 d_arch_name = "ConvLSTM"
