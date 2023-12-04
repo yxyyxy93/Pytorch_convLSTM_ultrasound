@@ -36,13 +36,14 @@ input_dim = 1
 hidden_dim = 32
 kernel_size = (3, 3)
 output_size = (50, 50, 168)  #
+num_layers = 5
 
 # ------------- choose from models
 d_arch_name = "ConvLSTM"
 
 # ---------- choose from loss functions
 loss_function = "myCrossEntropyLoss"  # Options: myCrossEntropyLoss, MulticlassDiceLoss, etc.
-val_function = "MulticlassDiceLoss"
+val_function = "PixelAccuracy"
 
 # Experiment name, easy to save weights and log files
 exp_name = d_arch_name + "_baseline"

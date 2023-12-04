@@ -14,17 +14,17 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torch.optim.swa_utils import AveragedModel
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
+import json
+import datetime
+
+from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset
+from utils.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
+from utils import criteria
 
 # Set mode for training
 os.environ['MODE'] = 'train'
 import config
-
 import model
-from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset
-from utils.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
-from utils import criteria
-import json
-import datetime
 
 model_names = sorted(
     name for name in model.__dict__ if
@@ -45,10 +45,8 @@ def main():
         print(f"Build `{config.d_arch_name}` model successfully.")
 
         # get the loss function class based on the string name
-        # LossClass = getattr(criteria, config.loss_function)
         criterion = getattr(criteria, config.loss_function)()
         criterion = criterion.to(device=config.device)
-        # LossClass = getattr(criteria, config.loss_function)
         val_crite = getattr(criteria, config.val_function)()
         val_crite = val_crite.to(device=config.device)
 
@@ -201,7 +199,7 @@ def build_model() -> [nn.Module, nn.Module]:
     convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
                                                         hidden_dim=config.hidden_dim,
                                                         kernel_size=config.kernel_size,
-                                                        num_layers=5)
+                                                        num_layers=config.num_layers)
 
     convLSTM_model = convLSTM_model.to(device=config.device)
 
@@ -211,13 +209,6 @@ def build_model() -> [nn.Module, nn.Module]:
     ema_convLSTM_model = AveragedModel(convLSTM_model, avg_fn=ema_avg)
 
     return convLSTM_model, ema_convLSTM_model
-
-
-def define_loss() -> nn.MSELoss:
-    criterion = nn.MSELoss()
-    criterion = criterion.to(
-        device=config.device)
-    return criterion
 
 
 def define_optimizer(model_train) -> optim.Adam:
@@ -269,12 +260,10 @@ def train(
         with amp.autocast():
             output = train_model(lr)
             sr = output[2]
-            # Assuming output from the model is of shape [N, C, D, H, W]
-            N, D, C, H, W = sr.shape
-            sr = sr.view(N * D, C, H, W)
-            # Assuming target tensor is of shape [N, D, H, W]
-            gt = gt.view(N * D, H, W)
-            gt = gt.long()
+            sr = sr.reshape(-1, 3, 50, 50)  # Reshape to [168, 3, 50, 50]
+            gt = gt.permute(3, 1, 2, 0).reshape(-1, 50, 50)
+            gt = gt.long()  # Ensure ground truth is of type long
+
             loss = criterion(sr, gt)
             score = val_crite(sr, gt)  # Compute
 
@@ -325,12 +314,9 @@ def validate(
             with amp.autocast():
                 output = validate_model(lr)
                 sr = output[2]
-                # Assuming output from the model is of shape [N, C, D, H, W]
-                N, D, C, H, W = sr.shape
-                sr = sr.view(N * D, C, H, W)
-                # Assuming target tensor is of shape [N, D, H, W]
-                gt = gt.view(N * D, H, W)
-                gt = gt.long()
+                sr = sr.view(-1, 3, 50, 50)  # Reshape to [168, 3, 50, 50]
+                gt = gt.permute(3, 1, 2, 0).view(-1, 50, 50)  # Reshape to [168, 50, 50]
+                gt = gt.long()  # Ensure ground truth is of type long
                 loss = criterion(sr, gt)  # Compute loss
                 score = val_crite(sr, gt)  # Compute
 
@@ -347,8 +333,8 @@ def validate(
 
     progress.display_summary()
     avg_loss = losses.avg
-    avg_ssim = scores.avg  # Calculate average SSIM
-    return avg_loss, avg_ssim  # Return both average loss and SSIM
+    avg_score = scores.avg  # Calculate average SSIM
+    return avg_loss, avg_score  # Return both average loss and SSIM
 
 
 if __name__ == "__main__":

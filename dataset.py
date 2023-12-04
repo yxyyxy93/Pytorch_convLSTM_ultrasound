@@ -93,6 +93,7 @@ class TestDataset(Dataset):
         image_dir (str): Test dataset directory.
         label_dir (str): Directory where the corresponding labels are stored.
     """
+
     def __init__(self, image_dir: str, label_dir: str) -> None:
         super(TestDataset, self).__init__()
         self.image_dir = image_dir
@@ -126,7 +127,7 @@ class TestDataset(Dataset):
         image_origin = read_csv_to_3d_array(label_file)
         # Normalize and add a channel dimension if necessary
         image_noisy = imgproc.normalize_and_add_channel(image_noisy)
-        image_origin = imgproc.normalize_and_add_channel(image_origin)
+        image_origin = image_origin - image_origin.min()
 
         # Convert to PyTorch tensors
         noisy_tensor = torch.from_numpy(image_noisy).float()
@@ -213,7 +214,6 @@ class CPUPrefetcher:
 
     def __len__(self) -> int:
         return len(self.dataloader)
-
 
 
 class CUDAPrefetcher:

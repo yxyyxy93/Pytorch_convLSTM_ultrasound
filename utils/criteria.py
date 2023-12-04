@@ -8,7 +8,8 @@ __all__ = [
     "SSIM3D",
     "DiceLoss",
     "MulticlassDiceLoss",
-    "myCrossEntropyLoss"
+    "myCrossEntropyLoss",
+    "PixelAccuracy"
 ]
 
 
@@ -165,7 +166,7 @@ class MulticlassDiceLoss(nn.Module):
 
             intersection = 2. * (y_pred_c * y_true_c).sum(dim=[0, 1, 2])
             dice_c = (intersection + self.smooth) / (
-                y_pred_c.sum(dim=[0, 1, 2]) + y_true_c.sum(dim=[0, 1, 2]) + self.smooth
+                    y_pred_c.sum(dim=[0, 1, 2]) + y_true_c.sum(dim=[0, 1, 2]) + self.smooth
             )
 
             if self.weight is not None:
@@ -176,11 +177,38 @@ class MulticlassDiceLoss(nn.Module):
 
 
 class myCrossEntropyLoss(nn.Module):
-    def __init__(self, weight=None, ignore_index=-100,  reduction='mean'):
+    def __init__(self, weight=None, ignore_index=-100, reduction='mean'):
         super(myCrossEntropyLoss, self).__init__()
         self.cross_entropy = nn.CrossEntropyLoss(weight=weight,
                                                  ignore_index=ignore_index,
                                                  reduction=reduction)
 
-    def forward(self, input, target):
-        return self.cross_entropy(input, target)
+    def forward(self, input_tensor, target):
+        return self.cross_entropy(input_tensor, target)
+
+
+class PixelAccuracy(nn.Module):
+    def __init__(self):
+        super(PixelAccuracy, self).__init__()
+
+    def forward(self, y_pred, y_true):
+        """
+        Calculate pixel accuracy for multi-class segmentation.
+        :param y_pred: The prediction tensor of shape [B, D, C, H, W]
+        :param y_true: The ground truth tensor of shape [B, D, H, W]
+        :return: Pixel accuracy
+        """
+        # Reshape y_pred to match the shape of y_true
+        # Merge B and D dimensions for y_pred and y_true
+        B, D, C, H, W = y_pred.shape
+        y_pred = y_pred.view(B * D, C, H, W)
+        y_true = y_true.view(B * D, H, W)
+
+        # Get the predicted class for each pixel
+        _, predicted = torch.max(y_pred, 1)
+
+        # Calculate accuracy for each class
+        correct = (predicted == y_true).sum()
+        total = y_true.numel()
+
+        return correct.float() / total

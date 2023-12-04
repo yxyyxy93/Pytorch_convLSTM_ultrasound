@@ -1,5 +1,7 @@
 import torch.nn as nn
 import torch
+import torch.nn.functional as F
+# import test
 
 __all__ = [
     "ConvLSTM"
@@ -230,14 +232,62 @@ class ConvLSTM(nn.Module):
         return param
 
 
-# # Example usage:
-# seq_length = 261  # Number of time steps
+def test_model_output(model, input_tensor, ground_truth):
+    """
+    Test the model output and ground truth for size, value range, and class validity.
+    :param model: The ConvLSTM model instance.
+    :param input_tensor: A sample input tensor for the model.
+    :param ground_truth: The ground truth data for comparison.
+    """
+    # Forward pass
+    _, _, output = model(input_tensor)
+
+    # Check the size of the output
+    print("Model Output Size:", output.shape)
+
+    # Applying softmax to convert logits to probabilities
+    probabilities = F.softmax(output, dim=2)
+
+    # Check value range in model output
+    min_prob, max_prob = probabilities.min(), probabilities.max()
+    print("Minimum Probability in Model Output:", min_prob.item())
+    print("Maximum Probability in Model Output:", max_prob.item())
+
+    # Check if the probabilities are between 0 and 1
+    if 0 <= min_prob.item() <= 1 and 0 <= max_prob.item() <= 1:
+        print("Value range in Model Output is valid.")
+    else:
+        print("Value range in Model Output is invalid.")
+
+    # Check for class validity in model output (assuming 3 classes)
+    _, predicted_classes = probabilities.max(2)
+    unique_classes_model = torch.unique(predicted_classes)
+    print("Unique predicted classes in Model Output:", unique_classes_model)
+    if all(0 <= uc < 3 for uc in unique_classes_model):
+        print("Class check in Model Output passed.")
+    else:
+        print("Invalid classes found in Model Output.")
+
+    # Check Ground Truth
+    print("Ground Truth Size:", ground_truth.shape)
+    unique_classes_gt = torch.unique(ground_truth)
+    print("Unique classes in Ground Truth:", unique_classes_gt)
+    if all(0 <= uc < 3 for uc in unique_classes_gt):
+        print("Class check in Ground Truth passed.")
+    else:
+        print("Invalid classes found in Ground Truth.")
+
+
+# # Example usage
+# if __name__ == "__main__":
+#     # Initialize model
+#     convLSTM_model = ConvLSTM(input_dim=1, hidden_dim=32, kernel_size=(3, 3), num_layers=5)
 #
-# # Create an instance of the modified ConvLSTM
-# conv_lstm = ConvLSTM(input_dim=1, hidden_dim=64, kernel_size=(3, 3), num_layers=2)
-# # Generate some example input data
-# input_data = torch.randn(2, seq_length, 1, 21, 21)
+#     # Prepare test dataset
+#     test_loader = test.load_test_dataset()
+#     for data in test_loader:
+#         input_data = data['lr']
+#         gt = data['gt']
+#         test_model_output(convLSTM_model, input_data, gt)
 #
-# # Forward pass
-# output = conv_lstm(input_data)
-# print(output[2].shape)
+#         break

@@ -8,7 +8,7 @@ import torch
 # Set mode for testing
 os.environ['MODE'] = 'test'
 import config
-import model  # Assuming this is your model module
+import model  # model module
 from test import load_test_dataset, load_checkpoint
 
 
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
                                                         hidden_dim=config.hidden_dim,
                                                         kernel_size=config.kernel_size,
-                                                        output_size=config.output_size).to(config.device)
+                                                        num_layers=config.num_layers).to(config.device)
     # Load model checkpoint
     convLSTM_model = load_checkpoint(convLSTM_model, config.model_path)
     # Prepare test dataset
@@ -113,9 +113,15 @@ if __name__ == "__main__":
     convLSTM_model.eval()
     with torch.no_grad():
         output = convLSTM_model(inputs)
-
+        sr = output[2]
+    gt = gt.squeeze()
+    sr = sr.squeeze()
+    # Apply argmax along the class dimension (c)
+    sr_3d = torch.argmax(sr, dim=1)
+    print(sr_3d.shape)
+    print(gt.shape)
     # Visualize the sample
-    visualize_sample(gt.squeeze(), output.squeeze(), slice_idx=(84, 29, 29))
+    visualize_sample(gt, sr_3d, slice_idx=(84, 29, 29))
 
     # ------------- visualize the metrics
     # Directory where the results are stored
