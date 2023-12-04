@@ -9,7 +9,6 @@ import os
 
 
 def show_cuda_gpu_info():
-    print("Checking CUDA and GPU status...")
     if torch.cuda.is_available():
         print("CUDA is available.")
         device_use = torch.device("cuda", 0)
@@ -34,17 +33,16 @@ device = show_cuda_gpu_info()
 
 # Model arch config
 input_dim = 1
-hidden_dim = 1
+hidden_dim = 64
 kernel_size = (3, 3)
 output_size = (50, 50, 168)  #
 
 # ------------- choose from models
-d_arch_name = "ConvLSTM3DClassifier"
-# d_arch_name = "ConvLSTM3DTransposedConv"
+d_arch_name = "ConvLSTM"
 
 # ---------- choose from loss functions
-loss_function = "DiceLoss"  # Options: "DiceLoss", "IoU", "SSIM3D", etc.
-val_function = "IoU"
+loss_function = "myCrossEntropyLoss"  # Options: myCrossEntropyLoss, MulticlassDiceLoss, etc.
+val_function = "MulticlassDiceLoss"
 
 # Experiment name, easy to save weights and log files
 exp_name = d_arch_name + "_baseline"
@@ -54,9 +52,8 @@ train_print_frequency = 10
 valid_print_frequency = 10
 
 # Initialize mode as None
-# MODE = "train"
-# MODE = os.getenv('MODE', 'train')  # Default to 'train' if not set
-mode = os.environ.get('MODE')
+mode = os.getenv('MODE', 'train')  # Default to 'train' if not set
+# mode = os.environ.get('MODE')
 
 if mode == "train":
     print("train mode")

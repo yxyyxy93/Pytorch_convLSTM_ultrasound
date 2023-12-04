@@ -6,7 +6,9 @@ import cv2
 
 __all__ = [
     "SSIM3D",
-    "DiceLoss"
+    "DiceLoss",
+    "MulticlassDiceLoss",
+    "myCrossEntropyLoss"
 ]
 
 
@@ -139,3 +141,46 @@ class IoU(nn.Module):
         iou = (intersection + self.smooth) / (union + self.smooth)
 
         return iou
+
+
+class MulticlassDiceLoss(nn.Module):
+    def __init__(self, smooth=1e-5, weight=None):
+        super(MulticlassDiceLoss, self).__init__()
+        self.smooth = smooth
+        self.weight = weight
+
+    def forward(self, y_pred, y_true):
+        N, C, H, W = y_pred.shape  # Assuming y_pred is [B*D, C, H, W]
+
+        # One-hot encode y_true if necessary
+        if len(y_true.shape) == 3:  # If y_true is [B*D, H, W]
+            y_true_one_hot = torch.zeros_like(y_pred).scatter_(1, y_true.unsqueeze(1), 1)
+        else:
+            y_true_one_hot = y_true  # If y_true is already one-hot encoded
+
+        dice = 0
+        for c in range(C):
+            y_true_c = y_true_one_hot[:, c, ...]
+            y_pred_c = y_pred[:, c, ...]
+
+            intersection = 2. * (y_pred_c * y_true_c).sum(dim=[0, 1, 2])
+            dice_c = (intersection + self.smooth) / (
+                y_pred_c.sum(dim=[0, 1, 2]) + y_true_c.sum(dim=[0, 1, 2]) + self.smooth
+            )
+
+            if self.weight is not None:
+                dice_c *= self.weight[c]
+            dice += dice_c
+
+        return 1 - dice / C
+
+
+class myCrossEntropyLoss(nn.Module):
+    def __init__(self, weight=None, ignore_index=-100,  reduction='mean'):
+        super(myCrossEntropyLoss, self).__init__()
+        self.cross_entropy = nn.CrossEntropyLoss(weight=weight,
+                                                 ignore_index=ignore_index,
+                                                 reduction=reduction)
+
+    def forward(self, input, target):
+        return self.cross_entropy(input, target)

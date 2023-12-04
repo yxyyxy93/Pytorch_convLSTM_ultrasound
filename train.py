@@ -44,14 +44,12 @@ def main():
         convLSTM_model, ema_convLSTM_model = build_model()
         print(f"Build `{config.d_arch_name}` model successfully.")
 
-        # define loss functions
-        # criterion = nn.MSELoss()
-        # Dynamically get the loss function class based on the string name
-        LossClass = getattr(criteria, config.loss_function)
-        criterion = LossClass()
+        # get the loss function class based on the string name
+        # LossClass = getattr(criteria, config.loss_function)
+        criterion = getattr(criteria, config.loss_function)()
         criterion = criterion.to(device=config.device)
-        LossClass = getattr(criteria, config.loss_function)
-        val_crite = LossClass()
+        # LossClass = getattr(criteria, config.loss_function)
+        val_crite = getattr(criteria, config.val_function)()
         val_crite = val_crite.to(device=config.device)
 
         print("Define all loss functions successfully.")
@@ -100,21 +98,21 @@ def main():
 
         for epoch in range(start_epoch, config.epochs):
             avg_train_loss, avg_train_score = train(convLSTM_model,
-                                                   ema_convLSTM_model,
-                                                   train_prefetcher,
-                                                   criterion,
-                                                   optimizer,
-                                                   epoch,
-                                                   scaler,
-                                                   writer,
-                                                   val_crite)  # Pass the SSIM model to train
+                                                    ema_convLSTM_model,
+                                                    train_prefetcher,
+                                                    criterion,
+                                                    optimizer,
+                                                    epoch,
+                                                    scaler,
+                                                    writer,
+                                                    val_crite)  # Pass the SSIM model to train
             avg_val_loss, avg_val_score = validate(convLSTM_model,
-                                                  val_prefetcher,
-                                                  epoch,
-                                                  writer,
-                                                  criterion,  # Pass the loss criterion to validate
-                                                  val_crite,
-                                                  "Val")
+                                                   val_prefetcher,
+                                                   epoch,
+                                                   writer,
+                                                   criterion,  # Pass the loss criterion to validate
+                                                   val_crite,
+                                                   "Val")
 
             # After train and validate calls
             # Save the training and validation metrics
@@ -203,7 +201,7 @@ def build_model() -> [nn.Module, nn.Module]:
     convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
                                                         hidden_dim=config.hidden_dim,
                                                         kernel_size=config.kernel_size,
-                                                        output_size=config.output_size)
+                                                        num_layers=2)
 
     convLSTM_model = convLSTM_model.to(device=config.device)
 
@@ -270,9 +268,16 @@ def train(
         train_model.zero_grad(set_to_none=True)
 
         with amp.autocast():
-            sr = train_model(lr)
+            output = train_model(lr)
+            sr = output[2]
+            # Assuming output from the model is of shape [N, C, D, H, W]
+            N, D, C, H, W = sr.shape
+            sr = sr.view(N * D, C, H, W)
+            # Assuming target tensor is of shape [N, D, H, W]
+            gt = gt.view(N * D, H, W)
+            gt = gt.long()
             loss = criterion(sr, gt)
-            score = val_crite(sr, gt)  # Compute SSIM
+            score = val_crite(sr, gt)  # Compute
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -280,14 +285,14 @@ def train(
         ema_convLSTM_model.update_parameters(train_model)
 
         losses.update(loss.item(), lr.size(0))
-        scores.update(score.item(), lr.size(0))  # Update SSIM meter
+        scores.update(score.item(), lr.size(0))  # Update  meter
 
         batch_time.update(time.time() - end)
         end = time.time()
 
         if batch_index % config.train_print_frequency == 0:
             writer.add_scalar("Train/Loss", loss.item(), batch_index + epoch * batches + 1)
-            writer.add_scalar("Train/SSIM", score.item(), batch_index + epoch * batches + 1)  # Log SSIM
+            writer.add_scalar("Train/Score", score.item(), batch_index + epoch * batches + 1)  # Log SSIM
             progress.display(batch_index + 1)
 
     avg_loss = losses.avg
@@ -319,9 +324,16 @@ def validate(
             lr = batch_data["lr"].to(device=config.device, non_blocking=True)
 
             with amp.autocast():
-                sr = validate_model(lr)
+                output = validate_model(lr)
+                sr = output[2]
+                # Assuming output from the model is of shape [N, C, D, H, W]
+                N, D, C, H, W = sr.shape
+                sr = sr.view(N * D, C, H, W)
+                # Assuming target tensor is of shape [N, D, H, W]
+                gt = gt.view(N * D, H, W)
+                gt = gt.long()
                 loss = criterion(sr, gt)  # Compute loss
-                score = val_crite(sr, gt)  # Compute SSIM
+                score = val_crite(sr, gt)  # Compute
 
             losses.update(loss.item(), lr.size(0))  # Update loss meter
             scores.update(score.item(), lr.size(0))

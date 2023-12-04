@@ -1,6 +1,10 @@
 import torch.nn as nn
 import torch
 
+__all__ = [
+    "ConvLSTM"
+]
+
 
 class ConvLSTMCell(nn.Module):
 
@@ -16,7 +20,7 @@ class ConvLSTMCell(nn.Module):
         kernel_size: (int, int)
             Size of the convolutional kernel.
         bias: bool
-            Whether or not to add the bias.
+            Whether to add the bias.
         """
 
         super(ConvLSTMCell, self).__init__()
@@ -68,7 +72,7 @@ class ConvLSTM(nn.Module):
         hidden_dim: Number of hidden channels
         kernel_size: Size of kernel in convolutions
         num_layers: Number of LSTM layers stacked on each other
-        batch_first: Whether or not dimension 0 is the batch or not
+        batch_first: Whether dimension 0 is the batch or not
         bias: Bias or no bias in Convolution
         return_all_layers: Return the list of computations for all layers
         Note: Will do same padding.
@@ -93,9 +97,9 @@ class ConvLSTM(nn.Module):
         self._check_kernel_size_consistency(kernel_size)
 
         # Make sure that both `kernel_size` and `hidden_dim` are lists having len == num_layers
-        kernel_size = self._extend_for_multilayer(kernel_size, num_layers)  # 转为列表
-        hidden_dim = self._extend_for_multilayer(hidden_dim, num_layers)  # 转为列表
-        if not len(kernel_size) == len(hidden_dim) == num_layers:  # 判断一致性
+        kernel_size = self._extend_for_multilayer(kernel_size, num_layers)
+        hidden_dim = self._extend_for_multilayer(hidden_dim, num_layers)
+        if not len(kernel_size) == len(hidden_dim) == num_layers:
             raise ValueError('Inconsistent list length.')
 
         self.input_dim = input_dim

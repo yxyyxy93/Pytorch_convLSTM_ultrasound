@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import os
 
+
 def show_cuda_gpu_info():
     print("Checking CUDA and GPU status...")
 
@@ -22,7 +23,8 @@ def show_cuda_gpu_info():
         device = torch.device("cpu")
 
     return device
- 
+
+
 # Random seed to maintain reproducible results
 random.seed(0)
 torch.manual_seed(0)
