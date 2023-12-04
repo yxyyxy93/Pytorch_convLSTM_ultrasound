@@ -52,8 +52,8 @@ train_print_frequency = 10
 valid_print_frequency = 10
 
 # Initialize mode as None
-mode = os.getenv('MODE', 'train')  # Default to 'train' if not set
-# mode = os.environ.get('MODE')
+# mode = os.getenv('MODE', 'train')  # Default to 'train' if not set
+mode = os.environ.get('MODE')
 
 if mode == "train":
     print("train mode")
@@ -62,7 +62,7 @@ if mode == "train":
     label_dir = r'.\dataset\sim_struct'  # path to the 'sim_struct' directory
 
     batch_size = 4
-    num_workers = 2
+    num_workers = 4
 
     # The address to load the pretrained model
     pretrained_model_path = "./results/pretrained_models/ConvLSTM_pretrain.pth.tar"

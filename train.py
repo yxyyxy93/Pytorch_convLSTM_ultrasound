@@ -201,7 +201,7 @@ def build_model() -> [nn.Module, nn.Module]:
     convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
                                                         hidden_dim=config.hidden_dim,
                                                         kernel_size=config.kernel_size,
-                                                        num_layers=2)
+                                                        num_layers=5)
 
     convLSTM_model = convLSTM_model.to(device=config.device)
 
@@ -265,9 +265,6 @@ def train(
         gt = batch_data["gt"].to(device=config.device, non_blocking=True)
         lr = batch_data["lr"].to(device=config.device, non_blocking=True)
         train_model.zero_grad(set_to_none=True)
-
-        print("Model device:", next(train_model.parameters()).device)
-        print("Input tensor device:", lr.device)
 
         with amp.autocast():
             output = train_model(lr)
