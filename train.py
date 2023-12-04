@@ -314,8 +314,8 @@ def validate(
             with amp.autocast():
                 output = validate_model(lr)
                 sr = output[2]
-                sr = sr.view(-1, 3, 50, 50)  # Reshape to [168, 3, 50, 50]
-                gt = gt.permute(3, 1, 2, 0).view(-1, 50, 50)  # Reshape to [168, 50, 50]
+                sr = sr.reshape(-1, 3, 50, 50)  # Reshape to [168, 3, 50, 50]
+                gt = gt.permute(3, 1, 2, 0).reshape(-1, 50, 50)
                 gt = gt.long()  # Ensure ground truth is of type long
                 loss = criterion(sr, gt)  # Compute loss
                 score = val_crite(sr, gt)  # Compute

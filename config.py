@@ -33,10 +33,10 @@ device = show_cuda_gpu_info()
 
 # Model arch config
 input_dim = 1
-hidden_dim = 32
+hidden_dim = 64
 kernel_size = (3, 3)
 output_size = (50, 50, 168)  #
-num_layers = 5
+num_layers = 2
 
 # ------------- choose from models
 d_arch_name = "ConvLSTM"
@@ -79,7 +79,7 @@ if mode == "train":
     epochs = 50
 
     # Optimizer parameter
-    model_lr = 1e-2
+    model_lr = 5e-3
     model_betas = (0.9, 0.99)
     model_eps = 1e-8
     model_weight_decay = 1e-5  # weight decay (e.g., 1e-4 or 1e-5) can be beneficial as it adds L2 regularization.
