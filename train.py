@@ -311,6 +311,7 @@ def validate(
             with amp.autocast():
                 output = validate_model(lr)
                 sr = output[1]
+                gt = gt.long()  # Ensure ground truth is of type long
                 loss = criterion(sr, gt)  # Compute loss
                 score = val_crite(sr, gt)  # Compute
 

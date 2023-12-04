@@ -36,7 +36,7 @@ input_dim = 1
 hidden_dim = 32
 kernel_size = (3, 3)
 output_size = (50, 50, 168)  #
-num_layers = 5
+num_layers = 3
 
 # ------------- choose from models
 d_arch_name = "ConvLSTM"

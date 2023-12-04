@@ -288,8 +288,9 @@ def test_model_output(model, input_tensor, ground_truth):
 
 # Example usage
 if __name__ == "__main__":
-    import test # for debug
+    import test  # for debug
     import visualization
+
     # Initialize model
     convLSTM_model = ConvLSTM(input_dim=1, hidden_dim=32, kernel_size=(3, 3), num_layers=5)
 
