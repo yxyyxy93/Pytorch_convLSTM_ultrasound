@@ -151,29 +151,34 @@ class MulticlassDiceLoss(nn.Module):
         self.weight = weight
 
     def forward(self, y_pred, y_true):
-        N, C, H, W = y_pred.shape  # Assuming y_pred is [B*D, C, H, W]
+        # y_pred shape: [B, T, C, H, W]
+        # y_true shape: [B, T, H, W]
 
-        # One-hot encode y_true if necessary
-        if len(y_true.shape) == 3:  # If y_true is [B*D, H, W]
-            y_true_one_hot = torch.zeros_like(y_pred).scatter_(1, y_true.unsqueeze(1), 1)
-        else:
-            y_true_one_hot = y_true  # If y_true is already one-hot encoded
+        y_pred = torch.softmax(y_pred, dim=2)  # Apply softmax along the class dimension
+        B, T, C, H, W = y_pred.shape
 
-        dice = 0
+        # One-hot encode y_true
+        y_true_one_hot = torch.zeros(B, T, C, H, W, device=y_pred.device)
+        y_true_one_hot.scatter_(2, y_true.unsqueeze(2), 1)  # Now y_true_one_hot is [B, T, C, H, W]
+
+        dice_loss = 0.0
         for c in range(C):
-            y_true_c = y_true_one_hot[:, c, ...]
-            y_pred_c = y_pred[:, c, ...]
+            y_true_c = y_true_one_hot[:, :, c, ...]
+            y_pred_c = y_pred[:, :, c, ...]
 
-            intersection = 2. * (y_pred_c * y_true_c).sum(dim=[0, 1, 2])
-            dice_c = (intersection + self.smooth) / (
-                    y_pred_c.sum(dim=[0, 1, 2]) + y_true_c.sum(dim=[0, 1, 2]) + self.smooth
-            )
+            intersection = 2.0 * (y_pred_c * y_true_c).sum(dim=[0, 1, 2, 3])
+            union = y_pred_c.sum(dim=[0, 1, 2, 3]) + y_true_c.sum(dim=[0, 1, 2, 3])
+
+            dice_c = (intersection + self.smooth) / (union + self.smooth)
 
             if self.weight is not None:
                 dice_c *= self.weight[c]
-            dice += dice_c
+            dice_loss += dice_c
 
-        return 1 - dice / C
+        # Average over the classes
+        dice_loss /= C
+
+        return 1 - dice_loss.mean()
 
 
 class myCrossEntropyLoss(nn.Module):
@@ -188,7 +193,6 @@ class myCrossEntropyLoss(nn.Module):
         input_permuted = input_tensor.permute(0, 2, 1, 3, 4)
 
         return self.cross_entropy(input_permuted, target)
-
 
 
 class PixelAccuracy(nn.Module):

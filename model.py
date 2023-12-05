@@ -291,7 +291,7 @@ if __name__ == "__main__":
     import visualization
 
     # Initialize model
-    convLSTM_model = ConvLSTM(input_dim=1, hidden_dim=32, output_dim=2, output_tl=168, kernel_size=(3, 3), num_layers=5)
+    convLSTM_model = ConvLSTM(input_dim=1, hidden_dim=32, output_dim=1, output_tl=168, kernel_size=(3, 3), num_layers=2)
 
     # Prepare test dataset
     test_loader = test.load_test_dataset()
@@ -301,8 +301,8 @@ if __name__ == "__main__":
 
         output = test_model_output(convLSTM_model, input_data, gt)
 
-        gt = gt.squeeze()
-        output = output.squeeze()
+        gt = gt.squeeze(dim=0)
+        output = output.squeeze(dim=0)
         # Apply argmax along the class dimension (c)
         sr_3d = torch.argmax(output, dim=1)
         print(gt.shape)

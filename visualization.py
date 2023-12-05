@@ -4,13 +4,6 @@ import matplotlib.pyplot as plt
 import torch
 
 
-## Set mode for testing
-# os.environ['MODE'] = 'test'
-# import config
-# import model  # model module
-# from test import load_test_dataset, load_checkpoint
-#
-
 def read_metrics(file_path):
     with open(file_path, 'r') as file:
         data_load = json.load(file)
@@ -31,8 +24,8 @@ def plot_metrics(metrics_plot, title):
 
     # Plot SSIM scores
     plt.subplot(1, 2, 2)
-    plt.plot(metrics_plot['avg_train_ssim_scores'], label='Avg Train SSIM')
-    plt.plot(metrics_plot['avg_val_ssim_scores'], label='Avg Validation SSIM')
+    plt.plot(metrics_plot['avg_train_scores'], label='Avg Train SSIM')
+    plt.plot(metrics_plot['avg_val_scores'], label='Avg Validation SSIM')
     plt.title(f'Average: {title} SSIM')
     plt.xlabel('Epoch')
     plt.ylabel('SSIM Score')
@@ -99,64 +92,74 @@ def visualize_sample(gt_visual, output_visual, title="Ground Truth vs Output", s
     plt.show()
 
 
-# if __name__ == "__main__":
-#     import numpy as np
-#     # ------------- visualize some samples
-#     # Initialize model
-#     convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
-#                                                         hidden_dim=config.hidden_dim,
-#                                                         kernel_size=config.kernel_size,
-#                                                         num_layers=config.num_layers).to(config.device)
-#     # Load model checkpoint
-#     convLSTM_model = load_checkpoint(convLSTM_model, config.model_path)
-#     # Prepare test dataset
-#     test_loader = load_test_dataset()
-#     for data in test_loader:
-#         inputs = data['lr'].to(config.device)
-#         gt = data['gt'].to(config.device)
-#
-#     # Generate output from the model
-#     convLSTM_model.eval()
-#     with torch.no_grad():
-#         output = convLSTM_model(inputs)
-#         sr = output[2]
-#     gt = gt.squeeze()
-#     sr = sr.squeeze()
-#     # Apply argmax along the class dimension (c)
-#     sr_3d = torch.argmax(sr, dim=1)
-#     print(sr_3d.shape)
-#     print(gt.shape)
-#     # Visualize the sample
-#     visualize_sample(gt, sr_3d, slice_idx=(84, 29, 29))
-#
-#     # ------------- visualize the metrics
-#     # Directory where the results are stored
-#     results_dir = os.path.join("results", config.exp_name)
-#     num_folds = 5
-#
-#     # Initialize lists to store aggregated metrics
-#     all_train_losses = []
-#     all_val_losses = []
-#     all_train_ssim_scores = []
-#     all_val_ssim_scores = []
-#
-#     for fold in range(1, num_folds + 1):
-#         results_file = os.path.join(results_dir, f'_fold {fold}', 'training_metrics.json')
-#         if os.path.exists(results_file):
-#             metrics = read_metrics(results_file)
-#             all_train_losses.append(metrics['train_losses'])
-#             all_val_losses.append(metrics['val_losses'])
-#             all_train_ssim_scores.append(metrics['train_scores'])
-#             all_val_ssim_scores.append(metrics['val_scores'])
-#         else:
-#             print(f"Metrics file for fold {fold} not found.")
-#
-#     # Calculate the average across all folds
-#     avg_metrics = {
-#         'avg_train_losses': np.mean(all_train_losses, axis=0),
-#         'avg_val_losses': np.mean(all_val_losses, axis=0),
-#         'avg_train_ssim_scores': np.mean(all_train_ssim_scores, axis=0),
-#         'avg_val_ssim_scores': np.mean(all_val_ssim_scores, axis=0)
-#     }
-#
-#     plot_metrics(avg_metrics, "Training and Validation")
+if __name__ == "__main__":
+    import numpy as np
+    import os
+
+    # Set mode for testing
+    os.environ['MODE'] = 'test'
+    import config
+    import model  # model module
+    from test import load_test_dataset, load_checkpoint
+
+    # ------------- visualize some samples
+    # Initialize model
+    convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
+                                                        hidden_dim=config.hidden_dim,
+                                                        output_dim=config.output_dim,
+                                                        output_tl=config.output_tl,
+                                                        kernel_size=config.kernel_size,
+                                                        num_layers=config.num_layers).to(config.device)
+    # Load model checkpoint
+    convLSTM_model = load_checkpoint(convLSTM_model, config.model_path)
+    # Prepare test dataset
+    test_loader = load_test_dataset()
+    for data in test_loader:
+        inputs = data['lr'].to(config.device)
+        gt = data['gt'].to(config.device)
+
+    # Generate output from the model
+    convLSTM_model.eval()
+    with torch.no_grad():
+        output = convLSTM_model(inputs)
+        sr = output[1]
+    gt = gt.squeeze()
+    sr = sr.squeeze()
+    # Apply argmax along the class dimension (c)
+    sr_3d = torch.argmax(sr, dim=1)
+    print(sr_3d.shape)
+    print(gt.shape)
+    # Visualize the sample
+    visualize_sample(gt, sr_3d, slice_idx=(84, 10, 10))
+
+    # ------------- visualize the metrics
+    # Directory where the results are stored
+    results_dir = os.path.join("results", config.exp_name)
+    num_folds = 5
+
+    # Initialize lists to store aggregated metrics
+    all_train_losses = []
+    all_val_losses = []
+    all_train_ssim_scores = []
+    all_val_ssim_scores = []
+
+    for fold in range(1, num_folds + 1):
+        results_file = os.path.join(results_dir, f'_fold {fold}', 'training_metrics.json')
+        if os.path.exists(results_file):
+            metrics = read_metrics(results_file)
+            all_train_losses.append(metrics['train_losses'])
+            all_val_losses.append(metrics['val_losses'])
+            all_train_ssim_scores.append(metrics['train_scores'])
+            all_val_ssim_scores.append(metrics['val_scores'])
+        else:
+            print(f"Metrics file for fold {fold} not found.")
+
+    # Calculate the average across all folds
+    avg_metrics = {
+        'avg_train_losses': np.mean(all_train_losses, axis=0),
+        'avg_val_losses': np.mean(all_val_losses, axis=0),
+        'avg_train_scores': np.mean(all_train_ssim_scores, axis=0),
+        'avg_val_scores': np.mean(all_val_ssim_scores, axis=0)
+    }
+
+    plot_metrics(avg_metrics, "Training and Validation")

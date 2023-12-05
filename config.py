@@ -33,11 +33,11 @@ device = show_cuda_gpu_info()
 
 # Model arch config
 input_dim = 1
-hidden_dim = 32
+hidden_dim = 64
 kernel_size = (3, 3)
 output_dim = 2  # 2 or more classes
 output_tl = 168  # the depth length
-num_layers = 3
+num_layers = 4
 
 # ------------- choose from models
 d_arch_name = "ConvLSTM"
@@ -50,7 +50,7 @@ val_function = "PixelAccuracy"
 exp_name = d_arch_name + "_baseline"
 
 # How many iterations to print the training result
-train_print_frequency = 10
+train_print_frequency = 2
 valid_print_frequency = 10
 
 # Initialize mode as None
@@ -63,7 +63,7 @@ if mode == "train":
     image_dir = r'.\dataset\sim_data'  # path to the 'sim_data' directory
     label_dir = r'.\dataset\sim_struct'  # path to the 'sim_struct' directory
 
-    batch_size = 4
+    batch_size = 16
     num_workers = 4
 
     # The address to load the pretrained model
@@ -80,7 +80,7 @@ if mode == "train":
     epochs = 50
 
     # Optimizer parameter
-    model_lr = 1e-2
+    model_lr = 1e-3
     model_betas = (0.9, 0.99)
     model_eps = 1e-8
     model_weight_decay = 1e-5  # weight decay (e.g., 1e-4 or 1e-5) can be beneficial as it adds L2 regularization.
@@ -99,7 +99,7 @@ elif mode == "test":
     image_dir = r'.\dataset\sim_data'  # path to the 'sim_data' directory
     label_dir = r'.\dataset\sim_struct'  # path to the 'sim_struct' directory
 
-    fold_number = 1  # Change as needed
+    fold_number = 5  # Change as needed
     model_filename = "d_best.pth.tar"
     # Constructing the path
     model_path = os.path.join("results", f"{exp_name}", f"_fold {fold_number}", model_filename)
