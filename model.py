@@ -38,16 +38,11 @@ class ConvLSTMCell(nn.Module):
                               kernel_size=self.kernel_size,
                               padding=self.padding,
                               bias=self.bias)
-        # Add batch normalization layer
-        self.batch_norm = nn.BatchNorm2d(4 * self.hidden_dim)
 
     def forward(self, input_tensor, cur_state):
         h_cur, c_cur = cur_state
         combined = torch.cat([input_tensor, h_cur], dim=1)  # concatenate along channel axis
         combined_conv = self.conv(combined)
-
-        # Apply batch normalization
-        combined_conv = self.batch_norm(combined_conv)
 
         cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=1)
         i = torch.sigmoid(cc_i)
