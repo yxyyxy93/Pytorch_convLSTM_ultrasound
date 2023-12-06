@@ -1,0 +1,17 @@
+
+Results Summary from train.py
+--------------------------------
+
+1. Model Checkpoints and Output:
+   - Checkpoints and model outputs are saved in directories based on 'config.exp_name'.
+   - Look in the 'samples' and 'results' directories for saved model states and outputs.
+
+2. Logs:
+   - Logs related to training progress and metrics might be stored in a 'logs' directory.
+   - Specifically, check 'samples/logs' directory, with subdirectories named after 'config.exp_name'.
+
+3. Training Metrics:
+   - A summary of training metrics is saved as a JSON file.
+   - The file is named like 'training_metrics_{current_date}.json' and should be in the 'results' directory.
+
+Note: The exact directory names depend on the value of 'config.exp_name' set in the training configuration.
