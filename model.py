@@ -38,11 +38,17 @@ class ConvLSTMCell(nn.Module):
                               kernel_size=self.kernel_size,
                               padding=self.padding,
                               bias=self.bias)
+        # Add batch normalization layer
+        self.batch_norm = nn.BatchNorm2d(4 * self.hidden_dim)
 
     def forward(self, input_tensor, cur_state):
         h_cur, c_cur = cur_state
         combined = torch.cat([input_tensor, h_cur], dim=1)  # concatenate along channel axis
         combined_conv = self.conv(combined)
+
+        # Apply batch normalization
+        combined_conv = self.batch_norm(combined_conv)
+
         cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=1)
         i = torch.sigmoid(cc_i)
         f = torch.sigmoid(cc_f)
@@ -193,9 +199,11 @@ class ConvLSTM(nn.Module):
             if layer_idx == self.num_layers - 1:
                 # For the last layer, reduce the channel dimension to output_dim
                 B, T, C, H, W = sampled_output.shape
-                sampled_output = sampled_output.view(B * T, C, H, W)  # Flatten temporal dimension for batch-wise processing
+                sampled_output = sampled_output.view(B * T, C, H,
+                                                     W)  # Flatten temporal dimension for batch-wise processing
                 sampled_output = self.final_conv(sampled_output)  # Apply 1x1 convolution
-                sampled_output = sampled_output.view(B, T, self.output_dim, H, W)  # Reshape back to original format with reduced channels
+                sampled_output = sampled_output.view(B, T, self.output_dim, H,
+                                                     W)  # Reshape back to original format with reduced channels
 
             final_outputs.append(sampled_output)
 
@@ -289,9 +297,25 @@ def test_model_output(model, input_tensor, ground_truth):
 if __name__ == "__main__":
     import test  # for debug
     import visualization
+    import torch.onnx
 
-    # Initialize model
-    convLSTM_model = ConvLSTM(input_dim=1, hidden_dim=32, output_dim=1, output_tl=168, kernel_size=(3, 3), num_layers=2)
+    input_dim = 1
+    hidden_dim = 64
+    output_dim = 2
+    output_tl = 168
+    kernel_size = (3, 3)
+    num_layers = 2
+    height = 21  # Example height, adjust as needed
+    width = 21  # Example width, adjust as needed
+    bias = True
+
+    # Initialize model using the configuration
+    convLSTM_model = ConvLSTM(input_dim=input_dim,
+                              hidden_dim=hidden_dim,
+                              output_dim=output_dim,
+                              output_tl=output_tl,
+                              kernel_size=kernel_size,
+                              num_layers=num_layers)
 
     # Prepare test dataset
     test_loader = test.load_test_dataset()
@@ -303,10 +327,22 @@ if __name__ == "__main__":
 
         gt = gt.squeeze(dim=0)
         output = output.squeeze(dim=0)
-        # Apply argmax along the class dimension (c)
         sr_3d = torch.argmax(output, dim=1)
         print(gt.shape)
         print(sr_3d.shape)
         visualization.visualize_sample(gt, sr_3d, title="Ground Truth vs Output", slice_idx=(84, 10, 10))
+
+        # Instantiate the submodel using the configuration
+        submodel = ConvLSTMCell(input_dim=input_dim,
+                                hidden_dim=hidden_dim,
+                                kernel_size=kernel_size,
+                                bias=bias)
+
+        # Create a dummy input and initial state using the configuration
+        dummy_input = torch.randn(1, input_dim, height, width)
+        dummy_state = (torch.zeros(1, hidden_dim, height, width),
+                       torch.zeros(1, hidden_dim, height, width))
+        # Export to ONNX
+        torch.onnx.export(submodel, (dummy_input, dummy_state), "submodel_convlstm_cell.onnx")
 
         break

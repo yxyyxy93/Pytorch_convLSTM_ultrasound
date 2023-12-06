@@ -1,7 +1,10 @@
 *.csv
 dataset/
+logs/
+results/
 *.yml
 env/
+*.onnx
 
 ## PyTorch
 

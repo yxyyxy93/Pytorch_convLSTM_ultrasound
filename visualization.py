@@ -110,8 +110,13 @@ if __name__ == "__main__":
                                                         output_tl=config.output_tl,
                                                         kernel_size=config.kernel_size,
                                                         num_layers=config.num_layers).to(config.device)
+
+    results_dir = config.results_dir
+    fold_number = 5  # Change as needed
+    model_filename = "d_best.pth.tar"
+    model_path = os.path.join(results_dir, f"_fold {fold_number}", model_filename)
     # Load model checkpoint
-    convLSTM_model = load_checkpoint(convLSTM_model, config.model_path)
+    convLSTM_model = load_checkpoint(convLSTM_model, model_path)
     # Prepare test dataset
     test_loader = load_test_dataset()
     for data in test_loader:
@@ -127,14 +132,11 @@ if __name__ == "__main__":
     sr = sr.squeeze()
     # Apply argmax along the class dimension (c)
     sr_3d = torch.argmax(sr, dim=1)
-    print(sr_3d.shape)
-    print(gt.shape)
     # Visualize the sample
     visualize_sample(gt, sr_3d, slice_idx=(84, 10, 10))
 
     # ------------- visualize the metrics
     # Directory where the results are stored
-    results_dir = os.path.join("results", config.exp_name)
     num_folds = 5
 
     # Initialize lists to store aggregated metrics

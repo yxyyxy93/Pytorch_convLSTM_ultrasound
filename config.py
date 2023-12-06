@@ -99,8 +99,5 @@ elif mode == "test":
     image_dir = r'.\dataset\sim_data'  # path to the 'sim_data' directory
     label_dir = r'.\dataset\sim_struct'  # path to the 'sim_struct' directory
 
-    fold_number = 5  # Change as needed
-    model_filename = "d_best.pth.tar"
     # Constructing the path
-    model_path = os.path.join("results", f"{exp_name}", f"_fold {fold_number}", model_filename)
-    print(model_path)
+    results_dir = os.path.join("results", f"{exp_name}_2023-12-06")
