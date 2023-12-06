@@ -297,56 +297,57 @@ def test_model_output(model, input_tensor, ground_truth):
 
     return output
 
-# # Example usage
-# if __name__ == "__main__":
-#     import test  # for debug
-#     import visualization
-#     import torch.onnx
-#
-#     input_dim = 1
-#     hidden_dim = 64
-#     output_dim = 2
-#     output_tl = 168
-#     kernel_size = (3, 3)
-#     num_layers = 2
-#     height = 21  # Example height, adjust as needed
-#     width = 21  # Example width, adjust as needed
-#     bias = True
-#
-#     # Initialize model using the configuration
-#     convLSTM_model = ConvLSTM(input_dim=input_dim,
-#                               hidden_dim=hidden_dim,
-#                               output_dim=output_dim,
-#                               output_tl=output_tl,
-#                               kernel_size=kernel_size,
-#                               num_layers=num_layers)
-#
-#     # Prepare test dataset
-#     test_loader = test.load_test_dataset()
-#     for data in test_loader:
-#         input_data = data['lr']
-#         gt = data['gt']
-#
-#         output = test_model_output(convLSTM_model, input_data, gt)
-#
-#         gt = gt.squeeze(dim=0)
-#         output = output.squeeze(dim=0)
-#         sr_3d = torch.argmax(output, dim=1)
-#         print(gt.shape)
-#         print(sr_3d.shape)
-#         visualization.visualize_sample(gt, sr_3d, title="Ground Truth vs Output", slice_idx=(84, 10, 10))
-#
-#         # Instantiate the submodel using the configuration
-#         submodel = ConvLSTMCell(input_dim=input_dim,
-#                                 hidden_dim=hidden_dim,
-#                                 kernel_size=kernel_size,
-#                                 bias=bias)
-#
-#         # Create a dummy input and initial state using the configuration
-#         dummy_input = torch.randn(1, input_dim, height, width)
-#         dummy_state = (torch.zeros(1, hidden_dim, height, width),
-#                        torch.zeros(1, hidden_dim, height, width))
-#         # Export to ONNX
-#         torch.onnx.export(submodel, (dummy_input, dummy_state), "submodel_convlstm_cell.onnx")
-#
-#         break
+
+# Example usage
+if __name__ == "__main__":
+    import test  # for debug
+    import visualization
+    import torch.onnx
+
+    input_dim = 1
+    hidden_dim = 64
+    output_dim = 2
+    output_tl = 168
+    kernel_size = (3, 3)
+    num_layers = 2
+    height = 21  # Example height, adjust as needed
+    width = 21  # Example width, adjust as needed
+    bias = True
+
+    # Initialize model using the configuration
+    convLSTM_model = ConvLSTM(input_dim=input_dim,
+                              hidden_dim=hidden_dim,
+                              output_dim=output_dim,
+                              output_tl=output_tl,
+                              kernel_size=kernel_size,
+                              num_layers=num_layers)
+
+    # Prepare test dataset
+    test_loader = test.load_test_dataset()
+    for data in test_loader:
+        input_data = data['lr']
+        gt = data['gt']
+
+        output = test_model_output(convLSTM_model, input_data, gt)
+
+        gt = gt.squeeze(dim=0)
+        output = output.squeeze(dim=0)
+        sr_3d = torch.argmax(output, dim=1)
+        print(gt.shape)
+        print(sr_3d.shape)
+        visualization.visualize_sample(gt, sr_3d, title="Ground Truth vs Output", slice_idx=(84, 10, 10))
+
+        # Instantiate the submodel using the configuration
+        submodel = ConvLSTMCell(input_dim=input_dim,
+                                hidden_dim=hidden_dim,
+                                kernel_size=kernel_size,
+                                bias=bias)
+
+        # Create a dummy input and initial state using the configuration
+        dummy_input = torch.randn(1, input_dim, height, width)
+        dummy_state = (torch.zeros(1, hidden_dim, height, width),
+                       torch.zeros(1, hidden_dim, height, width))
+        # Export to ONNX
+        torch.onnx.export(submodel, (dummy_input, dummy_state), "submodel_convlstm_cell.onnx")
+
+        break

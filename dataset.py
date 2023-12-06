@@ -76,8 +76,11 @@ class TrainValidImageDataset(Dataset):
         # Normalize and add a channel dimension if necessary
         image_noisy = imgproc.normalize_and_add_channel(image_noisy)
 
-        image_origin = image_origin - image_origin.min()  # to 0, 1, 2...
-        image_origin = np.where((image_origin == 1) | (image_origin == 2), 1, image_origin)  # change to 2 classes !
+        # First, find the maximum value in the array
+        max_value = image_origin.max()
+        # Set all elements equal to the max value to 1 and everything else to 0
+        image_origin = np.where(image_origin == max_value, 1, 0)
+
         image_origin = imgproc.resample_3d_array_numpy(image_origin, new_shape)
 
         # Convert to PyTorch tensors
@@ -137,8 +140,10 @@ class TestDataset(Dataset):
         # Normalize and add a channel dimension if necessary
         image_noisy = imgproc.normalize_and_add_channel(image_noisy)
 
-        image_origin = image_origin - image_origin.min()  # to 0, 1, 2...
-        image_origin = np.where((image_origin == 1) | (image_origin == 2), 1, image_origin)  # change to 2 classes !
+        # First, find the maximum value in the array
+        max_value = image_origin.max()
+        # Set all elements equal to the max value to 1 and everything else to 0
+        image_origin = np.where(image_origin == max_value, 1, 0)
         image_origin = imgproc.resample_3d_array_numpy(image_origin, new_shape)
 
         # Convert to PyTorch tensors

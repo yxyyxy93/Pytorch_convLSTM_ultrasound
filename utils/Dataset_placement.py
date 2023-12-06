@@ -33,13 +33,13 @@ def process_file(dirpath, file, pattern, destination):
 
 if __name__ == "__main__":
     # Define the source directory where to begin the search
-    source_directory = r'D:\pogo_work\results_mat\test_woven_[#090]_8'
+    source_directory = r'D:\pogo_work\results_mat\test_woven_[#45n45#090]_4_defect'
 
     # Define the file types you are looking for
     filetypes = ['origin.csv', 'amplitude.csv', 'phase.csv']
 
     # Define the destination directory where files will be copied
-    destination_directory = r'D:\python_work\ConvLSTM_3dultrasound\dataset'
+    destination_directory = r'..\dataset'
 
     # Define the pattern for the parent folder name you're interested in
     parent_folder_pattern = re.compile(r'seed')  # Pattern to match 'seed' in folder names

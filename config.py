@@ -11,7 +11,7 @@ import os
 def show_cuda_gpu_info():
     if torch.cuda.is_available():
         print("CUDA is available.")
-        device_use = torch.device("cuda", 3)
+        device_use = torch.device("cuda", 2)
         torch.backends.cudnn.benchmark = True
         print(f"Number of GPUs Available: {torch.cuda.device_count()}")
         for i in range(torch.cuda.device_count()):
@@ -43,7 +43,7 @@ num_layers = 4
 d_arch_name = "ConvLSTM"
 
 # ---------- choose from loss functions
-loss_function = "myCrossEntropyLoss"  # Options: myCrossEntropyLoss, MulticlassDiceLoss, etc.
+loss_function = "MulticlassDiceLoss"  # Options: myCrossEntropyLoss, MulticlassDiceLoss, etc.
 val_function = "PixelAccuracy"
 
 # Experiment name, easy to save weights and log files
