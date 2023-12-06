@@ -112,7 +112,7 @@ if __name__ == "__main__":
                                                         num_layers=config.num_layers).to(config.device)
 
     results_dir = config.results_dir
-    fold_number = 5  # Change as needed
+    fold_number = 2  # Change as needed
     model_filename = "d_best.pth.tar"
     model_path = os.path.join(results_dir, f"_fold {fold_number}", model_filename)
     # Load model checkpoint
