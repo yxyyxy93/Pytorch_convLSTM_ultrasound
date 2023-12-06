@@ -110,12 +110,6 @@ class ConvLSTM(nn.Module):
         self.output_tl = output_tl
         self.kernel_size = kernel_size
         self.num_layers = num_layers  # Define transposed convolution layers for spatial upsampling
-        # # Upsample layer to increase dimension from 21 to 42
-        # self.upsample_conv1 = nn.ConvTranspose2d(in_channels=hidden_dim[0],
-        #                                          out_channels=hidden_dim[0],
-        #                                          kernel_size=4, stride=2, padding=1)
-        # # Upsampling to exact 50x50 dimensions
-        # self.upsample_to_50 = nn.Upsample(size=(50, 50), mode='bilinear', align_corners=False)
 
         # Update the final convolution layer for 3-class output
         self.final_conv = nn.Conv2d(in_channels=hidden_dim[0], out_channels=output_dim, kernel_size=1)
@@ -186,10 +180,12 @@ class ConvLSTM(nn.Module):
         final_outputs = []
         for layer_idx, layer_output in enumerate(layer_output_list):
             # layer_output has shape [B, T, C, H, W]
-            # Downsample the time dimension  to output_tl
-            total_time_steps = layer_output.size(1)
-            selected_indices = torch.linspace(0, total_time_steps - 1, self.output_tl).long()
-            sampled_output = layer_output[:, selected_indices, ...]
+
+            # Select only the last output_tl time steps
+            if layer_output.size(1) > self.output_tl:
+                sampled_output = layer_output[:, -self.output_tl:, ...]
+            else:
+                sampled_output = layer_output
 
             if layer_idx == self.num_layers - 1:
                 # For the last layer, reduce the channel dimension to output_dim
@@ -199,7 +195,6 @@ class ConvLSTM(nn.Module):
                 sampled_output = self.final_conv(sampled_output)  # Apply 1x1 convolution
                 sampled_output = sampled_output.view(B, T, self.output_dim, H,
                                                      W)  # Reshape back to original format with reduced channels
-
             final_outputs.append(sampled_output)
 
         # Use the output of the last layer as the final output
