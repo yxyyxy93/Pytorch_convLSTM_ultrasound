@@ -154,6 +154,9 @@ class MulticlassDiceLoss(nn.Module):
         # y_pred shape: [B, T, C, H, W]
         # y_true shape: [B, T, H, W]
 
+        # Ensure y_true is a LongTensor (int64)
+        y_true = y_true.long()  # Convert y_true to LongTensor if not already
+
         y_pred = torch.softmax(y_pred, dim=2)  # Apply softmax along the class dimension
         B, T, C, H, W = y_pred.shape
 
@@ -209,8 +212,8 @@ class PixelAccuracy(nn.Module):
         # Reshape y_pred to match the shape of y_true
         # Merge B and D dimensions for y_pred and y_true
         B, D, C, H, W = y_pred.shape
-        y_pred = y_pred.view(B * D, C, H, W)
-        y_true = y_true.view(B * D, H, W)
+        y_pred = y_pred.reshape(B * D, C, H, W)
+        y_true = y_true.reshape(B * D, H, W)
 
         # Get the predicted class for each pixel
         _, predicted = torch.max(y_pred, 1)

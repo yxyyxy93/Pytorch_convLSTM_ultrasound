@@ -48,7 +48,7 @@ def resample_3d_array_numpy(data, new_shape):
                 orig_w = min(int(w * ratio_w), W_orig - 1)
 
                 # Assign the value from the nearest neighbor
-                resampled_data[d, h, w] = data[orig_h, orig_w, d]
+                resampled_data[d, w, h] = data[orig_h, orig_w, d]
 
     return resampled_data
 

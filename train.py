@@ -198,10 +198,13 @@ def load_dataset(num_folds=5) -> list:
 def build_model() -> [nn.Module, nn.Module]:
     convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
                                                         hidden_dim=config.hidden_dim,
+                                                        new_height=21,
+                                                        new_width=21,
+                                                        new_channel=config.output_dim,
+                                                        new_seq_len=config.output_tl,
                                                         kernel_size=config.kernel_size,
-                                                        output_dim=config.output_dim,
-                                                        output_tl=config.output_tl,
-                                                        num_layers=config.num_layers)
+                                                        num_layers=config.num_layers,
+                                                        batch_first=True)
 
     convLSTM_model = convLSTM_model.to(device=config.device)
 
@@ -260,8 +263,7 @@ def train(
         train_model.zero_grad(set_to_none=True)
 
         with amp.autocast():
-            output = train_model(lr)
-            sr = output[1]
+            sr, _ = train_model(lr)
             gt = gt.long()  # Ensure ground truth is of type long
             loss = criterion(sr, gt)
             score = val_crite(sr, gt)  # Compute
@@ -311,8 +313,7 @@ def validate(
             lr = batch_data["lr"].to(device=config.device, non_blocking=True)
 
             with amp.autocast():
-                output = validate_model(lr)
-                sr = output[1]
+                sr, _ = validate_model(lr)
                 gt = gt.long()  # Ensure ground truth is of type long
                 loss = criterion(sr, gt)  # Compute loss
                 score = val_crite(sr, gt)  # Compute

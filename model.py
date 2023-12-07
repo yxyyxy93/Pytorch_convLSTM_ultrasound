@@ -2,16 +2,13 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
-__all__ = [
-    "ConvLSTM"
-]
-
 
 class ConvLSTMCell(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, kernel_size, bias):
         """
         Initialize ConvLSTM cell.
+
         Parameters
         ----------
         input_dim: int
@@ -41,9 +38,10 @@ class ConvLSTMCell(nn.Module):
 
     def forward(self, input_tensor, cur_state):
         h_cur, c_cur = cur_state
-        combined = torch.cat([input_tensor, h_cur], dim=1)  # concatenate along channel axis
-        combined_conv = self.conv(combined)
 
+        combined = torch.cat([input_tensor, h_cur], dim=1)  # concatenate along channel axis
+
+        combined_conv = self.conv(combined)
         cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=1)
         i = torch.sigmoid(cc_i)
         f = torch.sigmoid(cc_f)
@@ -56,32 +54,28 @@ class ConvLSTMCell(nn.Module):
         return h_next, c_next
 
     def init_hidden(self, batch_size, image_size):
-        """
-        :param batch_size:
-        :param image_size:
-        :return:
-        """
         height, width = image_size
-        init_h = torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device)
-        init_c = torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device)
-        return init_h, init_c
+        return (torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device),
+                torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device))
 
 
 class ConvLSTM(nn.Module):
     """
+
     Parameters:
-        input_dim: Number of channels in input#
+        input_dim: Number of channels in input
         hidden_dim: Number of hidden channels
         kernel_size: Size of kernel in convolutions
         num_layers: Number of LSTM layers stacked on each other
-        batch_first: Whether dimension 0 is the batch or not
+        batch_first: Whether or not dimension 0 is the batch or not
         bias: Bias or no bias in Convolution
         return_all_layers: Return the list of computations for all layers
         Note: Will do same padding.
+
     Input:
-        A tensor of size [B, T, C, H, W] or [T, B, C, H, W]#
+        A tensor of size B, T, C, H, W or T, B, C, H, W
     Output:
-            A tuple of two lists of length num_layers (or length 1 if return_all_layers is False).
+        A tuple of two lists of length num_layers (or length 1 if return_all_layers is False).
             0 - layer_output_list is the list of lists of length T of each output
             1 - last_state_list is the list of last states
                     each element of the list is a tuple (h, c) for hidden state and memory
@@ -92,8 +86,9 @@ class ConvLSTM(nn.Module):
         >> h = last_states[0][0]  # 0 for layer index, 0 for h index
     """
 
-    def __init__(self, input_dim, hidden_dim, output_dim, output_tl, kernel_size=(3, 3), num_layers=2,
-                 batch_first=True, bias=True):
+    def __init__(self, input_dim, hidden_dim, kernel_size, num_layers,
+                 new_height, new_width, new_channel, new_seq_len,
+                 batch_first=False, bias=True, return_all_layers=False):
         super(ConvLSTM, self).__init__()
 
         self._check_kernel_size_consistency(kernel_size)
@@ -106,27 +101,16 @@ class ConvLSTM(nn.Module):
 
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
-        self.output_dim = output_dim
-        self.output_tl = output_tl
         self.kernel_size = kernel_size
-        self.num_layers = num_layers  # Define transposed convolution layers for spatial upsampling
-
-        # Adaptive pooling layer to resize the temporal dimension
-        self.adaptive_pool = nn.AdaptiveAvgPool1d(output_tl)
-
-        # Update the final convolution layer for 3-class output
-        self.final_conv = nn.Conv2d(in_channels=hidden_dim[0], out_channels=output_dim, kernel_size=1)
-
+        self.num_layers = num_layers
         self.batch_first = batch_first
         self.bias = bias
+        self.return_all_layers = return_all_layers
 
         cell_list = []
         for i in range(0, self.num_layers):
-            # if i==0:
-            #     cur_input_dim = self.input_dim
-            # else:
-            #     cur_input_dim = self.hidden_dim[i - 1]
             cur_input_dim = self.input_dim if i == 0 else self.hidden_dim[i - 1]
+
             cell_list.append(ConvLSTMCell(input_dim=cur_input_dim,
                                           hidden_dim=self.hidden_dim[i],
                                           kernel_size=self.kernel_size[i],
@@ -134,29 +118,22 @@ class ConvLSTM(nn.Module):
 
         self.cell_list = nn.ModuleList(cell_list)
 
-    def custom_adaptive_pooling(self, x):
-        # x has shape [B, T, C, H, W]
-        B, T, C, H, W = x.shape
-        pooled_output = torch.zeros(B, self.output_tl, C, H, W, device=x.device)
-
-        # Calculate the number of original time steps to combine for one output time step
-        step = T / self.output_tl
-
-        # Average the time steps for each output time step
-        for i in range(self.output_tl):
-            start_idx = int(i * step)
-            end_idx = int((i + 1) * step)
-            pooled_output[:, i, :, :, :] = x[:, start_idx:end_idx, :, :, :].mean(dim=1)
-
-        return pooled_output
+        self.mod_layer = ResizeAndSelectLastK(new_height=new_height,
+                                              new_width=new_width,
+                                              in_channels=self.hidden_dim[i],
+                                              new_channels=new_channel,
+                                              k=new_seq_len)
 
     def forward(self, input_tensor, hidden_state=None):
         """
+
         Parameters
         ----------
-        input_tensor: 5-D Tensor either of shape (t, b, c, h, w) or (b, t, c, h, w)
+        input_tensor: todo
+            5-D Tensor either of shape (t, b, c, h, w) or (b, t, c, h, w)
         hidden_state: todo
             None. todo implement stateful
+
         Returns
         -------
         last_state_list, layer_output
@@ -165,13 +142,15 @@ class ConvLSTM(nn.Module):
             # (t, b, c, h, w) -> (b, t, c, h, w)
             input_tensor = input_tensor.permute(1, 0, 2, 3, 4)
 
+        b, _, _, h, w = input_tensor.size()
+
         # Implement stateful ConvLSTM
         if hidden_state is not None:
             raise NotImplementedError()
         else:
             # Since the init is done in forward. Can send image size here
-            b, _, _, h, w = input_tensor.size()
-            hidden_state = self._init_hidden(batch_size=b, image_size=(h, w))
+            hidden_state = self._init_hidden(batch_size=b,
+                                             image_size=(h, w))
 
         layer_output_list = []
         last_state_list = []
@@ -184,7 +163,8 @@ class ConvLSTM(nn.Module):
             h, c = hidden_state[layer_idx]
             output_inner = []
             for t in range(seq_len):
-                h, c = self.cell_list[layer_idx](input_tensor=cur_layer_input[:, t, :, :, :], cur_state=[h, c])
+                h, c = self.cell_list[layer_idx](input_tensor=cur_layer_input[:, t, :, :, :],
+                                                 cur_state=[h, c])
                 output_inner.append(h)
 
             layer_output = torch.stack(output_inner, dim=1)
@@ -193,36 +173,15 @@ class ConvLSTM(nn.Module):
             layer_output_list.append(layer_output)
             last_state_list.append([h, c])
 
+        if not self.return_all_layers:
+            layer_output_list = layer_output_list[-1:]
             last_state_list = last_state_list[-1:]
 
-        # Process each layer's output
-        final_outputs = []
-        for layer_idx, layer_output in enumerate(layer_output_list):
-            # layer_output has shape [B, T, C, H, W]
-            if layer_idx == self.num_layers - 1:
-                # For the last layer, reduce the channel dimension to output_dim
-                B, T, C, H, W = layer_output.shape
-                layer_output = layer_output.reshape(B * T, C, H,
-                                                    W)  # Flatten temporal dimension for batch-wise processing
-                layer_output = self.final_conv(layer_output)  # Apply 1x1 convolution
-                layer_output = layer_output.reshape(B, T, self.output_dim, H,
-                                                    W)  # Reshape back to original format with reduced channels
+        resized_and_selected_output = self.mod_layer(layer_output_list)
 
-            # Apply custom adaptive pooling
-            pooled_output = self.custom_adaptive_pooling(layer_output)
-            final_outputs.append(pooled_output)
-
-        # Use the output of the last layer as the final output
-        final_output = final_outputs[-1]
-
-        return last_state_list, final_output
+        return resized_and_selected_output[-1], last_state_list
 
     def _init_hidden(self, batch_size, image_size):
-        """
-        :param batch_size:
-        :param image_size:
-        :return:
-        """
         init_states = []
         for i in range(self.num_layers):
             init_states.append(self.cell_list[i].init_hidden(batch_size, image_size))
@@ -230,24 +189,47 @@ class ConvLSTM(nn.Module):
 
     @staticmethod
     def _check_kernel_size_consistency(kernel_size):
-        """
-        :param kernel_size:
-        :return:
-        """
         if not (isinstance(kernel_size, tuple) or
                 (isinstance(kernel_size, list) and all([isinstance(elem, tuple) for elem in kernel_size]))):
             raise ValueError('`kernel_size` must be tuple or list of tuples')
 
     @staticmethod
     def _extend_for_multilayer(param, num_layers):
-        """
-        :param param:
-        :param num_layers:
-        :return:
-        """
         if not isinstance(param, list):
             param = [param] * num_layers
         return param
+
+
+class ResizeAndSelectLastK(nn.Module):
+    def __init__(self, new_height, new_width, in_channels, new_channels, k):
+        super(ResizeAndSelectLastK, self).__init__()
+        self.new_height = new_height
+        self.new_width = new_width
+        self.new_channels = new_channels
+        self.k = k
+        self.adaptive_pool = nn.AdaptiveAvgPool2d((new_height, new_width))
+        self.channel_conv = nn.Conv2d(in_channels=in_channels, out_channels=new_channels, kernel_size=1)
+
+    def forward(self, layer_output_list):
+        # Process each tensor in the list
+        processed_outputs = []
+        for output in layer_output_list:
+            # Resize spatial dimensions
+            B, T, C, H, W = output.shape
+            output = output.view(B * T, C, H, W)  # Merge batch and sequence dimensions for pooling
+            output = self.adaptive_pool(output)
+
+            # Change channel dimensions
+            output = self.channel_conv(output)
+
+            # Restore dimensions and select last k sequences
+            output = output.view(B, T, self.new_channels, self.new_height, self.new_width)
+            if T > self.k:
+                output = output[:, -self.k:, :, :, :]
+
+            processed_outputs.append(output)
+
+        return processed_outputs
 
 
 def test_model_output(model, input_tensor, ground_truth):
@@ -258,7 +240,7 @@ def test_model_output(model, input_tensor, ground_truth):
     :param ground_truth: The ground truth data for comparison.
     """
     # Forward pass
-    _, output = model(input_tensor)
+    output, _ = model(input_tensor)
 
     # Check the size of the output
     print("Model Output Size:", output.shape)
@@ -298,56 +280,67 @@ def test_model_output(model, input_tensor, ground_truth):
     return output
 
 
-# Example usage
-if __name__ == "__main__":
-    import test  # for debug
-    import visualization
-    import torch.onnx
-
-    input_dim = 1
-    hidden_dim = 64
-    output_dim = 2
-    output_tl = 168
-    kernel_size = (3, 3)
-    num_layers = 2
-    height = 21  # Example height, adjust as needed
-    width = 21  # Example width, adjust as needed
-    bias = True
-
-    # Initialize model using the configuration
-    convLSTM_model = ConvLSTM(input_dim=input_dim,
-                              hidden_dim=hidden_dim,
-                              output_dim=output_dim,
-                              output_tl=output_tl,
-                              kernel_size=kernel_size,
-                              num_layers=num_layers)
-
-    # Prepare test dataset
-    test_loader = test.load_test_dataset()
-    for data in test_loader:
-        input_data = data['lr']
-        gt = data['gt']
-
-        output = test_model_output(convLSTM_model, input_data, gt)
-
-        gt = gt.squeeze(dim=0)
-        output = output.squeeze(dim=0)
-        sr_3d = torch.argmax(output, dim=1)
-        print(gt.shape)
-        print(sr_3d.shape)
-        visualization.visualize_sample(gt, sr_3d, title="Ground Truth vs Output", slice_idx=(84, 10, 10))
-
-        # Instantiate the submodel using the configuration
-        submodel = ConvLSTMCell(input_dim=input_dim,
-                                hidden_dim=hidden_dim,
-                                kernel_size=kernel_size,
-                                bias=bias)
-
-        # Create a dummy input and initial state using the configuration
-        dummy_input = torch.randn(1, input_dim, height, width)
-        dummy_state = (torch.zeros(1, hidden_dim, height, width),
-                       torch.zeros(1, hidden_dim, height, width))
-        # Export to ONNX
-        torch.onnx.export(submodel, (dummy_input, dummy_state), "submodel_convlstm_cell.onnx")
-
-        break
+# # Example usage
+# if __name__ == "__main__":
+#     import test  # for debug
+#     import visualization
+#     import torch.onnx
+#     from utils import criteria
+#
+#     input_dim = 1
+#     hidden_dim = 64
+#     output_dim = 2
+#     output_tl = 168
+#     kernel_size = (3, 3)
+#     num_layers = 2
+#     height = 21  # Example height, adjust as needed
+#     width = 21  # Example width, adjust as needed
+#     bias = True
+#
+#     # Initialize model using the configuration
+#     convLSTM_model = ConvLSTM(input_dim=input_dim,
+#                               hidden_dim=hidden_dim,
+#                               new_height=21,
+#                               new_width=21,
+#                               new_channel=2,
+#                               new_seq_len=output_tl,
+#                               kernel_size=kernel_size,
+#                               num_layers=num_layers,
+#                               batch_first=True)
+#
+#     # Prepare test dataset
+#     test_loader = test.load_test_dataset()
+#     for data in test_loader:
+#         input_data = data['lr']
+#         gt = data['gt']
+#
+#         output = test_model_output(convLSTM_model, input_data, gt)
+#
+#         # check loss functions
+#         # get the loss function class based on the string name
+#         criterion = criteria.MulticlassDiceLoss()
+#         val_crite = criteria.PixelAccuracy()
+#         loss = criterion(output, gt)
+#         score = val_crite(output, gt)  # Compute
+#
+#
+#         gt = gt.squeeze(dim=0)
+#         output = output.squeeze(dim=0)
+#         sr_3d = torch.argmax(output, dim=1)
+#         visualization.visualize_sample(input_data.squeeze(), gt, sr_3d, title="Ground Truth vs Output",
+#                                        slice_idx_input=(130, 10, 10), slice_idx=(84, 10, 10))
+#
+#         # Instantiate the submodel using the configuration
+#         submodel = ConvLSTMCell(input_dim=input_dim,
+#                                 hidden_dim=hidden_dim,
+#                                 kernel_size=kernel_size,
+#                                 bias=bias)
+#
+#         # Create a dummy input and initial state using the configuration
+#         dummy_input = torch.randn(1, input_dim, height, width)
+#         dummy_state = (torch.zeros(1, hidden_dim, height, width),
+#                        torch.zeros(1, hidden_dim, height, width))
+#         # Export to ONNX
+#         torch.onnx.export(submodel, (dummy_input, dummy_state), "submodel_convlstm_cell.onnx")
+#
+#         break

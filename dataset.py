@@ -80,7 +80,6 @@ class TrainValidImageDataset(Dataset):
         max_value = image_origin.max()
         # Set all elements equal to the max value to 1 and everything else to 0
         image_origin = np.where(image_origin == max_value, 1, 0)
-
         image_origin = imgproc.resample_3d_array_numpy(image_origin, new_shape)
 
         # Convert to PyTorch tensors
