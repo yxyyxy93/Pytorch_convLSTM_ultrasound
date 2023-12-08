@@ -53,8 +53,8 @@ mode = os.getenv('MODE', 'train')  # Default to 'train' if not set
 
 if mode == "train":
     # Dataset address
-    image_dir = '/mnt/raid5/xiaoyu/Ultrasound_data/dataset/sim_data'  # path to the 'sim_data' directory
-    label_dir = '/mnt/raid5/xiaoyu/Ultrasound_data/dataset/sim_struct'  # path to the 'sim_struct' directory
+    image_dir = '/mnt/raid5/xiaoyu/Ultrasound_data/dataset_woven_[#45n45#090]_4_defect/sim_data'  # path to the 'sim_data' directory
+    label_dir = '/mnt/raid5/xiaoyu/Ultrasound_data/dataset_woven_[#45n45#090]_4_defect/sim_struct'  # path to the 'sim_struct' directory
 
     batch_size = 2
     num_workers = 2

@@ -21,7 +21,7 @@ def load_checkpoint(model_load, checkpoint_path):
 def load_test_dataset():
     # "\"Load and prepare the test dataset
     test_dataset = dataset.TestDataset(config.image_dir, config.label_dir)  # Adjust as per your dataset class
-    test_loader = DataLoader(test_dataset, batch_size=1,
+    test_loader = DataLoader(test_dataset, batch_size=2,
                              shuffle=False)  # Adjust batch_size and other parameters as needed
     return test_loader
 

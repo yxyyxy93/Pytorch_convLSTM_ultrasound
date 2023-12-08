@@ -7,8 +7,6 @@ import os
 import queue
 import threading
 import matplotlib.pyplot as plt
-import numpy as np
-
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -71,32 +69,42 @@ class TrainValidImageDataset(Dataset):
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
+        new_shape = [16, 16, 256]
         # ###  important as this func reverse the w and h dimension
-        new_shape = image_noisy.shape
-        image_origin = imgproc.resample_3d_array_numpy(image_origin, new_shape)
+        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape)
 
-        T, W, H = image_origin.shape  # Assuming image_origin has shape [T, W, H]
-        # First Tensor: Location of Class 1 in terms of W and H
-        location_matrix = np.any(image_origin == 7, axis=0)  # Shape: [W, H]
-        # Second Tensor: Depth of Class 1 in terms of T axis
-        depth_matrix = np.zeros((W, H))  # Initialize with zeros
-        for w in range(W):
-            for h in range(H):
-                t_indices = np.nonzero(image_origin[:, w, h] == 7)[0]
-                if len(t_indices) > 0:
-                    depth_matrix[w, h] = t_indices[0]  # Assign the earliest T index
-
-        # Convert location and depth matrices, and noisy image to PyTorch tensors
-        location_tensor = torch.from_numpy(location_matrix).long()
-        depth_tensor = torch.from_numpy(depth_matrix).long()
-        # Normalize and add a channel dimension if necessary
         image_noisy = imgproc.normalize_and_add_channel(image_noisy)
+
+        image_origin[image_origin == 7] = 1
+        image_origin[image_origin != 1] = 0
+
+        origin_tensor = torch.from_numpy(image_origin).long()
         noisy_tensor = torch.from_numpy(image_noisy).float()
 
-        # Stack location and depth tensors to create a combined tensor
-        combined_tensor = torch.stack([location_tensor, depth_tensor], dim=0)  # Shape: [2, W, H]
+        return {"gt": origin_tensor, "lr": noisy_tensor}
 
-        return {"gt": combined_tensor, "lr": noisy_tensor}
+        # T, W, H = image_origin.shape  # Assuming image_origin has shape [T, W, H]
+        # # First Tensor: Location of Class 1 in terms of W and H
+        # location_matrix = np.any(image_origin == 7, axis=0)  # Shape: [W, H]
+        # # Second Tensor: Depth of Class 1 in terms of T axis
+        # depth_matrix = np.zeros((W, H))  # Initialize with zeros
+        # for w in range(W):
+        #     for h in range(H):
+        #         t_indices = np.nonzero(image_origin[:, w, h] == 7)[0]
+        #         if len(t_indices) > 0:
+        #             depth_matrix[w, h] = t_indices[0]  # Assign the earliest T index
+
+        # # Convert location and depth matrices, and noisy image to PyTorch tensors
+        # location_tensor = torch.from_numpy(location_matrix).long()
+        # depth_tensor = torch.from_numpy(depth_matrix).long()
+        # # Normalize and add a channel dimension if necessary
+        # image_noisy = imgproc.normalize_and_add_channel(image_noisy)
+        # noisy_tensor = torch.from_numpy(image_noisy).float()
+        #
+        # # Stack location and depth tensors to create a combined tensor
+        # combined_tensor = torch.stack([location_tensor, depth_tensor], dim=0)  # Shape: [2, W, H]
+
+        # return {"gt": combined_tensor, "lr": noisy_tensor}
 
     def __len__(self) -> int:
         return len(self.dataset_label_mapping)
@@ -142,32 +150,19 @@ class TestDataset(Dataset):
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
+        new_shape = [16, 16, 256]
         # ###  important as this func reverse the w and h dimension
-        new_shape = image_noisy.shape
-        image_origin = imgproc.resample_3d_array_numpy(image_origin, new_shape)
+        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape)
 
-        T, W, H = image_origin.shape  # Assuming image_origin has shape [T, W, H]
-        # First Tensor: Location of Class 1 in terms of W and H
-        location_matrix = np.any(image_origin == 7, axis=0)  # Shape: [W, H]
-        # Second Tensor: Depth of Class 1 in terms of T axis
-        depth_matrix = np.zeros((W, H))  # Initialize with zeros
-        for w in range(W):
-            for h in range(H):
-                t_indices = np.nonzero(image_origin[:, w, h] == 7)[0]
-                if len(t_indices) > 0:
-                    depth_matrix[w, h] = t_indices[0]  # Assign the earliest T index
-
-        # Convert location and depth matrices, and noisy image to PyTorch tensors
-        location_tensor = torch.from_numpy(location_matrix).long()
-        depth_tensor = torch.from_numpy(depth_matrix).long()
-        # Normalize and add a channel dimension if necessary
         image_noisy = imgproc.normalize_and_add_channel(image_noisy)
+
+        image_origin[image_origin == 7] = 1
+        image_origin[image_origin != 1] = 0
+
+        origin_tensor = torch.from_numpy(image_origin).long()
         noisy_tensor = torch.from_numpy(image_noisy).float()
 
-        # Stack location and depth tensors to create a combined tensor
-        combined_tensor = torch.stack([location_tensor, depth_tensor], dim=0)  # Shape: [2, W, H]
-
-        return {"gt": combined_tensor, "lr": noisy_tensor}
+        return {"gt": origin_tensor, "lr": noisy_tensor}
 
     def __len__(self) -> int:
         return len(self.dataset_label_mapping)

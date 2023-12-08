@@ -113,25 +113,19 @@ if __name__ == "__main__":
     os.environ['MODE'] = 'test'
     import config
     import model  # model module
+    import model_unet3d
     from test import load_test_dataset, load_checkpoint
 
     # ------------- visualize some samples
     # Initialize model
-    convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
-                                                        hidden_dim=config.hidden_dim,
-                                                        new_height=21,
-                                                        new_width=21,
-                                                        new_channel=config.output_dim,
-                                                        new_seq_len=config.output_tl,
-                                                        kernel_size=config.kernel_size,
-                                                        num_layers=config.num_layers,
-                                                        batch_first=True)
+    convLSTM_model = model_unet3d.UNet3D(in_channels=config.input_dim, num_classes=config.output_dim)
+
     results_dir = config.results_dir
     fold_number = 1  # Change as needed
     model_filename = "d_best.pth.tar"
     model_path = os.path.join(results_dir, f"_fold {fold_number}", model_filename)
     # Load model checkpoint
-    convLSTM_model = load_checkpoint(convLSTM_model, model_path)
+    # convLSTM_model = load_checkpoint(convLSTM_model, model_path)
     # Prepare test dataset
     test_loader = load_test_dataset()
     for data in test_loader:
@@ -141,26 +135,26 @@ if __name__ == "__main__":
     # Generate output from the model
     convLSTM_model.eval()
     with torch.no_grad():
-        sr, _ = convLSTM_model(inputs)
+        sr = convLSTM_model(inputs)
+    sr = sr.squeeze()
 
     gt = gt.squeeze()
-    sr = sr.squeeze()
+    inputs = inputs.squeeze()
     # Apply argmax along the class dimension (c)
-    # sr_3d = torch.argmax(sr, dim=1) # for multiDice-loss
-    sr_3d = (sr >= 0.5).long()    # for Dice-loss
+    sr_3d = torch.argmax(sr, dim=1) # for multiDice-loss
+    sr_3d = sr   # for Dice-loss
 
     # Visualize the sample
-    visualize_sample(inputs.squeeze(), gt, sr_3d, slice_idx_input=(130, 10, 10), slice_idx=(84, 10, 10))
+    visualize_sample(inputs, gt, sr_3d, slice_idx_input=(128, 8, 8), slice_idx=(84, 8, 8))
 
     # ------------- visualize the metrics
     # Directory where the results are stored
     num_folds = 1
-
     # Initialize lists to store aggregated metrics
     all_train_losses = []
     all_val_losses = []
-    all_train_ssim_scores = []
-    all_val_ssim_scores = []
+    all_train_scores = []
+    all_val_scores = []
 
     for fold in range(1, num_folds + 1):
         results_file = os.path.join(results_dir, f'_fold {fold}', 'training_metrics.json')
@@ -168,8 +162,8 @@ if __name__ == "__main__":
             metrics = read_metrics(results_file)
             all_train_losses.append(metrics['train_losses'])
             all_val_losses.append(metrics['val_losses'])
-            all_train_ssim_scores.append(metrics['train_scores'])
-            all_val_ssim_scores.append(metrics['val_scores'])
+            all_train_scores.append(metrics['train_scores'])
+            all_val_scores.append(metrics['val_scores'])
         else:
             print(f"Metrics file for fold {fold} not found.")
 
@@ -177,8 +171,8 @@ if __name__ == "__main__":
     avg_metrics = {
         'avg_train_losses': np.mean(all_train_losses, axis=0),
         'avg_val_losses': np.mean(all_val_losses, axis=0),
-        'avg_train_scores': np.mean(all_train_ssim_scores, axis=0),
-        'avg_val_scores': np.mean(all_val_ssim_scores, axis=0)
+        'avg_train_scores': np.mean(all_train_scores, axis=0),
+        'avg_val_scores': np.mean(all_val_scores, axis=0)
     }
 
     plot_metrics(avg_metrics, "Training and Validation")

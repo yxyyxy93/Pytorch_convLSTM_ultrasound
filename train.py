@@ -10,13 +10,14 @@ from torch import nn
 from torch import optim
 from torch.cuda import amp
 from torch.optim import lr_scheduler
-from torch.optim.lr_scheduler import MultiStepLR
 from torch.optim.swa_utils import AveragedModel
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 import json
 import datetime
 import atexit
+import signal
+import sys
 
 from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset, show_dataset_info
 from utils.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
@@ -26,6 +27,7 @@ from utils import criteria
 os.environ['MODE'] = 'train'
 import config
 import model
+import model_unet3d
 
 model_names = sorted(
     name for name in model.__dict__ if
@@ -35,58 +37,65 @@ model_names = sorted(
 def main():
     # Load datasets for each fold
     dataloaders_per_fold = load_dataset(num_folds=5)
-    # Iterate over each fold
-    for fold, (train_prefetcher, val_prefetcher) in enumerate(dataloaders_per_fold):
-        print(f"Starting training on fold {fold + 1}")
-        # Initialize the number of training epochs
-        start_epoch = 0
-        print("Load all datasets successfully.")
-        # show_dataset_info(train_prefetcher, show_sample_slices=True)
-        convLSTM_model, ema_convLSTM_model = build_model()
-        print(f"Build `{config.d_arch_name}` model successfully.")
+    # Initialize the number of training epochs
+    start_epoch = 0
+    print("Load all datasets successfully.")
+    # show_dataset_info(train_prefetcher, show_sample_slices=True)
+    convLSTM_model, ema_convLSTM_model = build_model()
+    print(f"Build `{config.d_arch_name}` model successfully.")
 
-        # get the loss function class based on the string name
-        criterion = getattr(criteria, config.loss_function)()
-        criterion = criterion.to(device=config.device)
-        val_crite = getattr(criteria, config.val_function)()
-        val_crite = val_crite.to(device=config.device)
-        print("Define all loss functions successfully.")
-        optimizer = define_optimizer(convLSTM_model)
-        print("Define all optimizer functions successfully.")
-        scheduler = define_scheduler(optimizer)
-        print("Define all optimizer scheduler functions successfully.")
-        print("Check whether to load pretrained model weights...")
-        if config.pretrained_d_model_weights_path:
-            convLSTM_model = load_state_dict(convLSTM_model, config.pretrained_d_model_weights_path)
-            print(f"Loaded `{config.pretrained_d_model_weights_path}` pretrained model weights successfully.")
-        else:
-            print("Pretrained model weights not found.")
+    # get the loss function class based on the string name
+    criterion = getattr(criteria, config.loss_function)()
+    criterion = criterion.to(device=config.device)
+    val_crite = getattr(criteria, config.val_function)()
+    val_crite = val_crite.to(device=config.device)
+    print("Define all loss functions successfully.")
+    optimizer = optim.Adam(convLSTM_model.parameters(),
+                               config.model_lr,
+                               config.model_betas,
+                               config.model_eps,
+                               config.model_weight_decay)
+    print("Define all optimizer functions successfully.")
 
-        print("Check whether the pretrained model is restored...")
-        if config.resume_d_model_weights_path:
-            convLSTM_model, ema_convLSTM_model, start_epoch, optimizer, scheduler = load_state_dict(
+    scheduler = lr_scheduler.MultiStepLR(optimizer=optimizer,
+                                             milestones=config.lr_scheduler_milestones,
+                                             gamma=config.lr_scheduler_gamma)
+    print("Define all optimizer scheduler functions successfully.")
+
+    print("Check whether to load pretrained model weights...")
+    if config.pretrained_d_model_weights_path:
+        convLSTM_model = load_state_dict(convLSTM_model, config.pretrained_d_model_weights_path)
+        print(f"Loaded `{config.pretrained_d_model_weights_path}` pretrained model weights successfully.")
+    else:
+        print("Pretrained model weights not found.")
+
+    print("Check whether the pretrained model is restored...")
+    if config.resume_d_model_weights_path:
+        convLSTM_model, ema_convLSTM_model, start_epoch, optimizer, scheduler = load_state_dict(
                 convLSTM_model,
                 config.pretrained_d_model_weights_path,
                 ema_convLSTM_model,
                 optimizer,
                 scheduler,
                 "resume")
-            print("Loaded pretrained model weights.")
-        else:
-            print("Resume training model not found. Start training from scratch.")
+        print("Loaded pretrained model weights.")
+    else:
+        print("Resume training model not found. Start training from scratch.")
 
-        # Get current date
-        current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    # Get current date
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+
+    # Create training process log file
+    writer = SummaryWriter(os.path.join("logs", config.exp_name))
+
+    # Initialize the gradient scaler
+    scaler = amp.GradScaler(enabled=torch.cuda.is_available())
+    # Iterate over each fold
+    for fold, (train_prefetcher, val_prefetcher) in enumerate(dataloaders_per_fold):
+        print(f"Starting training on fold {fold + 1}")
         # Create a experiment results
         results_dir = os.path.join("results", f"{config.exp_name}_{current_date}", f"_fold {fold + 1}")
         make_directory(results_dir)
-
-        # Create training process log file
-        writer = SummaryWriter(os.path.join("logs", config.exp_name))
-
-        # Initialize the gradient scaler
-        scaler = amp.GradScaler(enabled=torch.cuda.is_available())
-
         # Initialize lists to store metrics for each epoch
         best_score = 0
         epoch_train_losses = []
@@ -196,15 +205,7 @@ def load_dataset(num_folds=5) -> list:
 
 
 def build_model() -> [nn.Module, nn.Module]:
-    convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
-                                                        hidden_dim=config.hidden_dim,
-                                                        new_height=21,
-                                                        new_width=21,
-                                                        new_channel=config.output_dim,
-                                                        new_seq_len=config.output_tl,
-                                                        kernel_size=config.kernel_size,
-                                                        num_layers=config.num_layers,
-                                                        batch_first=True)
+    convLSTM_model = model_unet3d.UNet3D(in_channels=config.input_dim, num_classes=config.output_dim)
 
     convLSTM_model = convLSTM_model.to(device=config.device)
 
@@ -214,24 +215,6 @@ def build_model() -> [nn.Module, nn.Module]:
     ema_convLSTM_model = AveragedModel(convLSTM_model, avg_fn=ema_avg)
 
     return convLSTM_model, ema_convLSTM_model
-
-
-def define_optimizer(model_train) -> optim.Adam:
-    optimizer = optim.Adam(model_train.parameters(),
-                           config.model_lr,
-                           config.model_betas,
-                           config.model_eps,
-                           config.model_weight_decay)
-
-    return optimizer
-
-
-def define_scheduler(optimizer) -> MultiStepLR:
-    scheduler = lr_scheduler.MultiStepLR(optimizer=optimizer,
-                                         milestones=config.lr_scheduler_milestones,
-                                         gamma=config.lr_scheduler_gamma)
-
-    return scheduler
 
 
 def train(
@@ -259,14 +242,13 @@ def train(
     for batch_index, batch_data in enumerate(train_prefetcher):
         data_time.update(time.time() - end)
         gt = batch_data["gt"].to(device=config.device, non_blocking=True)
-        loc_gt = gt[:, 0]
         lr = batch_data["lr"].to(device=config.device, non_blocking=True)
         train_model.zero_grad(set_to_none=True)
 
         with amp.autocast():
-            sr, _ = train_model(lr)
-            loss = criterion(sr, loc_gt)
-            score = val_crite(sr, loc_gt)  # Compute
+            sr = train_model(lr)
+            loss = criterion(sr, gt)
+            score = val_crite(sr, gt)  # Compute
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -313,8 +295,7 @@ def validate(
             lr = batch_data["lr"].to(device=config.device, non_blocking=True)
 
             with amp.autocast():
-                sr, _ = validate_model(lr)
-                gt = gt.long()  # Ensure ground truth is of type long
+                sr = validate_model(lr)
                 loss = criterion(sr, gt)  # Compute loss
                 score = val_crite(sr, gt)  # Compute
 
@@ -340,8 +321,20 @@ def cleanup():
     torch.cuda.empty_cache()
 
 
-if __name__ == "__main__":
-    main()
+def signal_handler(sig, frame):
+    print('You pressed Ctrl+C or terminated the script!')
+    # Perform any necessary cleanup here
+    sys.exit(0)
 
-    # Register the cleanup function to be called at program exit
-    atexit.register(cleanup)
+
+if __name__ == "__main__":
+    # Register the signal handler
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    # Your main program logic starts here
+    print("Program is running... Press Ctrl+C to terminate.")
+    while True:
+        main()
+        # Register the cleanup function to be called at program exit
+        atexit.register(cleanup)

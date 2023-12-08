@@ -114,20 +114,32 @@ class DiceLoss(nn.Module):
         self.smooth = smooth
 
     def forward(self, inputs, targets):
-        # Convert inputs to probability space [0, 1] using sigmoid
-        inputs = torch.sigmoid(inputs)
-
+        #  inputs  probability space [0, 1]
         # Squeeze the input to remove the channel dimension since C=1
-        inputs = inputs.squeeze()  # Now inputs shape is [B, T, H, W]
+        inputs = inputs.squeeze(dim=1)  # Now inputs shape is [B, T, H, W]
 
         # Ensure targets is a LongTensor (int64)
         targets = targets.long()  # Convert y_true to LongTensor if not already
+
+        B, T_target, H, W = targets.shape
+        _, T, _, _ = inputs.shape
+        # Calculate initial downsampling factor
+        factor = T // T_target
+        # Adjust factor if T is not divisible by T_target
+        if T % T_target != 0:
+            # Find a factor that's close but ensures we don't index out of bounds
+            while T // factor < T_target:
+                factor -= 1
+        # Downsample by taking every 'factor'-th element
+        inputs = inputs[:, :T_target * factor:factor, :, :]
+
+        # Ensure the shape is correct
+        assert inputs.shape[1] == T_target
 
         # Flatten the tensors
         inputs_flat = inputs.reshape(-1)
         targets_flat = targets.reshape(-1)
 
-        print(targets_flat.sum())
         # Calculate Dice coefficient
         intersection = (inputs_flat * targets_flat).sum()
         dice = (2. * intersection + self.smooth) / (inputs_flat.sum() + targets_flat.sum() + self.smooth)
@@ -164,18 +176,28 @@ class MulticlassDiceLoss(nn.Module):
 
     def forward(self, y_pred, y_true):
         # y_pred shape: [B, T, C, H, W]
-        # y_true shape: [B, T, H, W]
+        # y_true shape: [B, H, W]
 
         # Ensure y_true is a LongTensor (int64)
         y_true = y_true.long()  # Convert y_true to LongTensor if not already
 
         y_pred = torch.softmax(y_pred, dim=2)  # Apply softmax along the class dimension
+
+        # Assuming y_pred is of shape [B, T, C, H, W]
         B, T, C, H, W = y_pred.shape
 
         # One-hot encode y_true
-        y_true_one_hot = torch.zeros(B, T, C, H, W, device=y_pred.device)
-        y_true_one_hot.scatter_(2, y_true.unsqueeze(2), 1)  # Now y_true_one_hot is [B, T, C, H, W]
+        # The one-hot encoding should match y_pred's shape, so we expand y_true
+        y_true_expanded = y_true.unsqueeze(1).unsqueeze(2)  # Expand to [B, 1, 1, H, W]
+        y_true_expanded = y_true_expanded.expand(-1, T, C, -1, -1)  # Expand to [B, T, C, H, W]
 
+        # Ensure y_true is of the correct type for scatter_
+        y_true_expanded = y_true_expanded.long()
+
+        y_true_one_hot = torch.zeros_like(y_pred, device=y_pred.device)  # Match y_pred's shape and device
+        y_true_one_hot.scatter_(2, y_true_expanded, 1)
+
+        # Calculate Dice Loss
         dice_loss = 0.0
         for c in range(C):
             y_true_c = y_true_one_hot[:, :, c, ...]
@@ -197,17 +219,26 @@ class MulticlassDiceLoss(nn.Module):
 
 
 class myCrossEntropyLoss(nn.Module):
-    def __init__(self, weight=None, ignore_index=-100, reduction='mean'):
-        super(myCrossEntropyLoss, self).__init__()
-        self.cross_entropy = nn.CrossEntropyLoss(weight=weight,
-                                                 ignore_index=ignore_index,
-                                                 reduction=reduction)
+    """
+__constants__ = ['ignore_index', 'reduction', 'label_smoothing']
+ignore_index: int
+label_smoothing: float
+"""
+    def __init__(self, ignore_index: int = -100,
+                 label_smoothing: float = 0.0) -> None:
+        super().__init__()
+        self.ignore_index = ignore_index
+        self.label_smoothing = label_smoothing
 
-    def forward(self, input_tensor, target):
-        # Permute the input tensor to shape [B, C, T, H, W]
-        input_permuted = input_tensor.permute(0, 2, 1, 3, 4)
-
-        return self.cross_entropy(input_permuted, target)
+    def forward(self, input, target):
+        input = input.squeeze(dim=1)
+        B, C, H, W = input.shape
+        input_permuted = input.permute(0, 3, 2, 1)
+        input_flat = input_permuted.reshape(B * H * W, C)
+        # For the target, ensure it's a long tensor first as required by CrossEntropyLoss
+        target_flat = target.reshape(B * H * W).long()
+        return F.cross_entropy(input_flat, target_flat, ignore_index=self.ignore_index,
+                               label_smoothing=self.label_smoothing)
 
 
 class PixelAccuracy(nn.Module):
@@ -215,18 +246,28 @@ class PixelAccuracy(nn.Module):
         super(PixelAccuracy, self).__init__()
 
     def forward(self, y_pred, y_true):
-        """
-        Calculate pixel accuracy for multi-class segmentation.
-        :param y_pred: The prediction tensor of shape [B, H, W]
-        :param y_true: The ground truth tensor of shape [B, H, W]
-        :return: Pixel accuracy
-        """
-        # Get the predicted class for each pixel
-        threshold = 0.5
-        predicted = (y_pred > threshold).long()
+            """
+            Calculate pixel accuracy for multi-class segmentation.
+            :param y_pred: The prediction tensor of shape [B, H, W]
+            :param y_true: The ground truth tensor of shape [B, H, W]
+            :return: Pixel accuracy
+            """
+            # Get the predicted class for each pixel
+            threshold = 0.5
+            predicted = (y_pred > threshold).long()
 
-        # Calculate accuracy for each class
-        correct = (predicted == y_true).sum()
-        total = y_true.numel()
+            # Calculate accuracy for each class
+            correct = (predicted == y_true).sum()
+            total = y_true.numel()
 
-        return correct.float() / total
+            return correct.float() / total
+
+
+# # Example usage
+# if __name__ == "__main__":
+#     # Example of target with class indices
+#     loss = nn.CrossEntropyLoss()
+#     input = torch.randn(3, 5, requires_grad=True)
+#     target = torch.empty(3, dtype=torch.long).random_(5)
+#     output = loss(input, target)
+#     output.backward()

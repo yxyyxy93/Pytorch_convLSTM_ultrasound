@@ -67,7 +67,7 @@ class ConvLSTM(nn.Module):
         hidden_dim: Number of hidden channels
         kernel_size: Size of kernel in convolutions
         num_layers: Number of LSTM layers stacked on each other
-        batch_first: Whether or not dimension 0 is the batch or not
+        batch_first: Whether dimension 0 is the batch or not
         bias: Bias or no bias in Convolution
         return_all_layers: Return the list of computations for all layers
         Note: Will do same padding.
@@ -87,12 +87,11 @@ class ConvLSTM(nn.Module):
     """
 
     def __init__(self, input_dim, hidden_dim, kernel_size, num_layers,
-                 new_height, new_width, new_channel, new_seq_len,
+                 new_channel, new_seq_len,
                  batch_first=False, bias=True, return_all_layers=False):
         super(ConvLSTM, self).__init__()
 
         self._check_kernel_size_consistency(kernel_size)
-
         # Make sure that both `kernel_size` and `hidden_dim` are lists having len == num_layers
         kernel_size = self._extend_for_multilayer(kernel_size, num_layers)
         hidden_dim = self._extend_for_multilayer(hidden_dim, num_layers)
@@ -118,11 +117,11 @@ class ConvLSTM(nn.Module):
 
         self.cell_list = nn.ModuleList(cell_list)
 
-        self.mod_layer = ResizeAndSelectLastK(new_height=new_height,
-                                              new_width=new_width,
-                                              in_channels=self.hidden_dim[i],
-                                              new_channels=new_channel,
-                                              k=new_seq_len)
+        self.mod_layer = ResizeAndSelectLastK(k=new_seq_len)
+        self.final_conv = nn.Conv2d(in_channels=self.hidden_dim[0],
+                                    out_channels=new_channel,
+                                    kernel_size=(1, 1),
+                                    bias=self.bias)
 
     def forward(self, input_tensor, hidden_state=None):
         """
@@ -170,6 +169,18 @@ class ConvLSTM(nn.Module):
             layer_output = torch.stack(output_inner, dim=1)
             cur_layer_input = layer_output
 
+            # Apply final_conv only after the last layer
+            if layer_idx == self.num_layers - 1:
+                # Before applying self.final_conv
+                batch_size, seq_len, channels, height, width = layer_output.size()
+                layer_output = layer_output.view(batch_size * seq_len, channels, height, width)
+                # Apply the convolution
+                layer_output = self.final_conv(layer_output)
+                layer_output = torch.sigmoid(layer_output)
+                # Reshape back if needed
+                layer_output = layer_output.view(batch_size, seq_len, -1, height,
+                                                 width)  # adjust -1 according to your new number of channels
+
             layer_output_list.append(layer_output)
             last_state_list.append([h, c])
 
@@ -201,33 +212,27 @@ class ConvLSTM(nn.Module):
 
 
 class ResizeAndSelectLastK(nn.Module):
-    def __init__(self, new_height, new_width, in_channels, new_channels, k):
+    def __init__(self, k):
         super(ResizeAndSelectLastK, self).__init__()
-        self.new_height = new_height
-        self.new_width = new_width
-        self.new_channels = new_channels
         self.k = k
-        self.adaptive_pool = nn.AdaptiveAvgPool2d((new_height, new_width))
-        self.channel_conv = nn.Conv2d(in_channels=in_channels, out_channels=new_channels, kernel_size=1)
 
     def forward(self, layer_output_list):
         # Process each tensor in the list
         processed_outputs = []
         for output in layer_output_list:
-            # Resize spatial dimensions
             B, T, C, H, W = output.shape
-            output = output.view(B * T, C, H, W)  # Merge batch and sequence dimensions for pooling
-            output = self.adaptive_pool(output)
+            pooled_output = torch.zeros(B, self.k, C, H, W, device=output.device)
 
-            # Change channel dimensions
-            output = self.channel_conv(output)
+            # Calculate the number of original time steps to combine for one output time step
+            step = T / self.k
+            # Average the time steps for each output time step
+            for i in range(self.k):
+                start_idx = int(i * step)
+                end_idx = int((i + 1) * step)
+                pooled_output[:, i, :, :, :] = output[:, start_idx:end_idx, :, :, :].mean(dim=1)
 
-            # Restore dimensions and select last k sequences
-            output = output.view(B, T, self.new_channels, self.new_height, self.new_width)
-            if T > self.k:
-                output = output[:, -self.k:, :, :, :]
-
-            processed_outputs.append(output)
+            # output 0~1
+            processed_outputs.append(pooled_output)
 
         return processed_outputs
 
@@ -289,7 +294,7 @@ if __name__ == "__main__":
 
     input_dim = 1
     hidden_dim = 64
-    output_dim = 1
+    output_dim = 2
     output_tl = 1
     kernel_size = (3, 3)
     num_layers = 2
@@ -300,9 +305,7 @@ if __name__ == "__main__":
     # Initialize model using the configuration
     convLSTM_model = ConvLSTM(input_dim=input_dim,
                               hidden_dim=hidden_dim,
-                              new_height=21,
-                              new_width=21,
-                              new_channel=1,
+                              new_channel=output_dim,
                               new_seq_len=output_tl,
                               kernel_size=kernel_size,
                               num_layers=num_layers,
@@ -321,11 +324,13 @@ if __name__ == "__main__":
         # get the loss function class based on the string name
         # criterion = criteria.MulticlassDiceLoss()
         # loss = criterion(output, loc_gt)
-        val_crite = criteria.PixelAccuracy()
-        score = val_crite(output, loc_gt)  # Compute
-
-        criterion = criteria.DiceLoss()
+        criterion = criteria.myCrossEntropyLoss()
         loss = criterion(output, loc_gt)
+        # val_crite = criteria.PixelAccuracy()
+        # score = val_crite(output, loc_gt)  # Compute
+
+        # criterion = criteria.DiceLoss()
+        # loss = criterion(output, loc_gt)
 
         loc_gt = loc_gt.squeeze()
         output = output.squeeze()

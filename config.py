@@ -33,17 +33,17 @@ device = show_cuda_gpu_info()
 
 # Model arch config
 input_dim = 1
-hidden_dim = 64
+hidden_dim = 16
 kernel_size = (3, 3)
 output_dim = 1  # 2 or more classes
-output_tl = 168  # the depth length
-num_layers = 4
+output_tl = 1  # the depth length
+num_layers = 1
 
 # ------------- choose from models
 d_arch_name = "ConvLSTM"
 
 # ---------- choose from loss functions
-loss_function = "MulticlassDiceLoss"  # Options: myCrossEntropyLoss, MulticlassDiceLoss, etc.
+loss_function = "DiceLoss"  # Options: DiceLoss, myCrossEntropyLoss, MulticlassDiceLoss, etc.
 val_function = "PixelAccuracy"
 
 # Experiment name, easy to save weights and log files
