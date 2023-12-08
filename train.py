@@ -103,12 +103,12 @@ def main():
                                                     epoch,
                                                     scaler,
                                                     writer,
-                                                    val_crite)  # Pass the SSIM model to train
+                                                    val_crite)  # Pass model to train
             avg_val_loss, avg_val_score = validate(convLSTM_model,
                                                    val_prefetcher,
                                                    epoch,
                                                    writer,
-                                                   criterion,  # Pass the loss criterion to validate
+                                                   criterion,  # validate
                                                    val_crite,
                                                    "Val")
 
@@ -243,13 +243,13 @@ def train(
         epoch: int,
         scaler: amp.GradScaler,
         writer: SummaryWriter,
-        val_crite: any  # Add the SSIM computation function
-) -> (float, float):  # Change return type to include both loss and SSIM
+        val_crite: any  # Add the score computation function
+) -> (float, float):  # Change return type to include both loss and score
     batches = len(train_prefetcher)
     batch_time = AverageMeter("Time", ":6.3f")
     data_time = AverageMeter("Data", ":6.3f")
     losses = AverageMeter("Loss", ":6.6f")
-    scores = AverageMeter("Score", ":6.6f")  # New meter for SSIM
+    scores = AverageMeter("Score", ":6.6f")  # New meter for score
     progress = ProgressMeter(batches, [batch_time, data_time, losses, scores], prefix=f"Epoch: [{epoch + 1}]")
 
     train_model.train()
@@ -259,14 +259,14 @@ def train(
     for batch_index, batch_data in enumerate(train_prefetcher):
         data_time.update(time.time() - end)
         gt = batch_data["gt"].to(device=config.device, non_blocking=True)
+        loc_gt = gt[:, 0]
         lr = batch_data["lr"].to(device=config.device, non_blocking=True)
         train_model.zero_grad(set_to_none=True)
 
         with amp.autocast():
             sr, _ = train_model(lr)
-            gt = gt.long()  # Ensure ground truth is of type long
-            loss = criterion(sr, gt)
-            score = val_crite(sr, gt)  # Compute
+            loss = criterion(sr, loc_gt)
+            score = val_crite(sr, loc_gt)  # Compute
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -281,12 +281,12 @@ def train(
 
         if batch_index % config.train_print_frequency == 0:
             writer.add_scalar("Train/Loss", loss.item(), batch_index + epoch * batches + 1)
-            writer.add_scalar("Train/Score", score.item(), batch_index + epoch * batches + 1)  # Log SSIM
+            writer.add_scalar("Train/Score", score.item(), batch_index + epoch * batches + 1)  # Log
             progress.display(batch_index + 1)
 
     avg_loss = losses.avg
-    avg_ssim = scores.avg  # Calculate average SSIM
-    return avg_loss, avg_ssim  # Return both average loss and SSIM
+    avg_score = scores.avg  # Calculate average score
+    return avg_loss, avg_score  # Return both average loss and score
 
 
 def validate(
@@ -297,7 +297,7 @@ def validate(
         criterion: nn.MSELoss,  # Add criterion for loss computation
         val_crite: any,
         mode: str
-) -> (float, float):  # Change return type to include both loss and SSIM
+) -> (float, float):  # Change return type to include both loss and score
     batch_time = AverageMeter("Time", ":6.3f")
     losses = AverageMeter("Loss", ":6.6f")  # New meter for loss
     scores = AverageMeter("Score", ":6.6f")
@@ -326,13 +326,13 @@ def validate(
 
             if batch_index % config.valid_print_frequency == 0:
                 writer.add_scalar(f"{mode}/Loss", loss.item(), epoch + 1)  # Log loss
-                writer.add_scalar(f"{mode}/SSIM", score.item(), epoch + 1)
+                writer.add_scalar(f"{mode}/Score", score.item(), epoch + 1)
                 progress.display(batch_index + 1)
 
     progress.display_summary()
     avg_loss = losses.avg
-    avg_score = scores.avg  # Calculate average SSIM
-    return avg_loss, avg_score  # Return both average loss and SSIM
+    avg_score = scores.avg  # Calculate average score
+    return avg_loss, avg_score  # Return both average loss and score
 
 
 # Function to release GPU resources

@@ -280,67 +280,71 @@ def test_model_output(model, input_tensor, ground_truth):
     return output
 
 
-# # Example usage
-# if __name__ == "__main__":
-#     import test  # for debug
-#     import visualization
-#     import torch.onnx
-#     from utils import criteria
-#
-#     input_dim = 1
-#     hidden_dim = 64
-#     output_dim = 2
-#     output_tl = 168
-#     kernel_size = (3, 3)
-#     num_layers = 2
-#     height = 21  # Example height, adjust as needed
-#     width = 21  # Example width, adjust as needed
-#     bias = True
-#
-#     # Initialize model using the configuration
-#     convLSTM_model = ConvLSTM(input_dim=input_dim,
-#                               hidden_dim=hidden_dim,
-#                               new_height=21,
-#                               new_width=21,
-#                               new_channel=2,
-#                               new_seq_len=output_tl,
-#                               kernel_size=kernel_size,
-#                               num_layers=num_layers,
-#                               batch_first=True)
-#
-#     # Prepare test dataset
-#     test_loader = test.load_test_dataset()
-#     for data in test_loader:
-#         input_data = data['lr']
-#         gt = data['gt']
-#
-#         output = test_model_output(convLSTM_model, input_data, gt)
-#
-#         # check loss functions
-#         # get the loss function class based on the string name
-#         criterion = criteria.MulticlassDiceLoss()
-#         val_crite = criteria.PixelAccuracy()
-#         loss = criterion(output, gt)
-#         score = val_crite(output, gt)  # Compute
-#
-#
-#         gt = gt.squeeze(dim=0)
-#         output = output.squeeze(dim=0)
-#         sr_3d = torch.argmax(output, dim=1)
-#         visualization.visualize_sample(input_data.squeeze(), gt, sr_3d, title="Ground Truth vs Output",
-#                                        slice_idx_input=(130, 10, 10), slice_idx=(84, 10, 10))
-#
-#         # Instantiate the submodel using the configuration
-#         submodel = ConvLSTMCell(input_dim=input_dim,
-#                                 hidden_dim=hidden_dim,
-#                                 kernel_size=kernel_size,
-#                                 bias=bias)
-#
-#         # Create a dummy input and initial state using the configuration
-#         dummy_input = torch.randn(1, input_dim, height, width)
-#         dummy_state = (torch.zeros(1, hidden_dim, height, width),
-#                        torch.zeros(1, hidden_dim, height, width))
-#         # Export to ONNX
-#         torch.onnx.export(submodel, (dummy_input, dummy_state), "submodel_convlstm_cell.onnx")
-#
-#         break
+# Example usage
+if __name__ == "__main__":
+    import test  # for debug
+    import visualization
+    import torch.onnx
+    from utils import criteria
+
+    input_dim = 1
+    hidden_dim = 64
+    output_dim = 1
+    output_tl = 1
+    kernel_size = (3, 3)
+    num_layers = 2
+    height = 21  # Example height, adjust as needed
+    width = 21  # Example width, adjust as needed
+    bias = True
+
+    # Initialize model using the configuration
+    convLSTM_model = ConvLSTM(input_dim=input_dim,
+                              hidden_dim=hidden_dim,
+                              new_height=21,
+                              new_width=21,
+                              new_channel=1,
+                              new_seq_len=output_tl,
+                              kernel_size=kernel_size,
+                              num_layers=num_layers,
+                              batch_first=True)
+
+    # Prepare test dataset
+    test_loader = test.load_test_dataset()
+    for data in test_loader:
+        input_data = data['lr']
+        gt = data['gt']
+
+        loc_gt = gt[:, 0]
+        output = test_model_output(convLSTM_model, input_data, gt)
+
+        # check loss functions
+        # get the loss function class based on the string name
+        # criterion = criteria.MulticlassDiceLoss()
+        # loss = criterion(output, loc_gt)
+        val_crite = criteria.PixelAccuracy()
+        score = val_crite(output, loc_gt)  # Compute
+
+        criterion = criteria.DiceLoss()
+        loss = criterion(output, loc_gt)
+
+        loc_gt = loc_gt.squeeze()
+        output = output.squeeze()
+        output_arg = torch.sigmoid(output)
+        input_data = input_data.squeeze()
+        visualization.visualize_sample(input_data, loc_gt, output_arg, title="Ground Truth vs Output",
+                                       slice_idx_input=(200, 10, 10), slice_idx=(84, 10, 10))
+
+        # Instantiate the submodel using the configuration
+        submodel = ConvLSTMCell(input_dim=input_dim,
+                                hidden_dim=hidden_dim,
+                                kernel_size=kernel_size,
+                                bias=bias)
+
+        # Create a dummy input and initial state using the configuration
+        dummy_input = torch.randn(1, input_dim, height, width)
+        dummy_state = (torch.zeros(1, hidden_dim, height, width),
+                       torch.zeros(1, hidden_dim, height, width))
+        # Export to ONNX
+        torch.onnx.export(submodel, (dummy_input, dummy_state), "submodel_convlstm_cell.onnx")
+
+        break

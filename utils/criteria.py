@@ -109,16 +109,28 @@ class SSIM3D(nn.Module):
 
 # -------------- loss functions
 class DiceLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, smooth=1):
         super(DiceLoss, self).__init__()
+        self.smooth = smooth
 
-    def forward(self, inputs, targets, smooth=1):
-        # Flatten label and prediction tensors
-        inputs = inputs.view(-1)
-        targets = targets.view(-1)
+    def forward(self, inputs, targets):
+        # Convert inputs to probability space [0, 1] using sigmoid
+        inputs = torch.sigmoid(inputs)
 
-        intersection = (inputs * targets).sum()
-        dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
+        # Squeeze the input to remove the channel dimension since C=1
+        inputs = inputs.squeeze()  # Now inputs shape is [B, T, H, W]
+
+        # Ensure targets is a LongTensor (int64)
+        targets = targets.long()  # Convert y_true to LongTensor if not already
+
+        # Flatten the tensors
+        inputs_flat = inputs.reshape(-1)
+        targets_flat = targets.reshape(-1)
+
+        print(targets_flat.sum())
+        # Calculate Dice coefficient
+        intersection = (inputs_flat * targets_flat).sum()
+        dice = (2. * intersection + self.smooth) / (inputs_flat.sum() + targets_flat.sum() + self.smooth)
 
         return 1 - dice
 
@@ -205,18 +217,13 @@ class PixelAccuracy(nn.Module):
     def forward(self, y_pred, y_true):
         """
         Calculate pixel accuracy for multi-class segmentation.
-        :param y_pred: The prediction tensor of shape [B, D, C, H, W]
-        :param y_true: The ground truth tensor of shape [B, D, H, W]
+        :param y_pred: The prediction tensor of shape [B, H, W]
+        :param y_true: The ground truth tensor of shape [B, H, W]
         :return: Pixel accuracy
         """
-        # Reshape y_pred to match the shape of y_true
-        # Merge B and D dimensions for y_pred and y_true
-        B, D, C, H, W = y_pred.shape
-        y_pred = y_pred.reshape(B * D, C, H, W)
-        y_true = y_true.reshape(B * D, H, W)
-
         # Get the predicted class for each pixel
-        _, predicted = torch.max(y_pred, 1)
+        threshold = 0.5
+        predicted = (y_pred > threshold).long()
 
         # Calculate accuracy for each class
         correct = (predicted == y_true).sum()
