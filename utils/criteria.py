@@ -127,12 +127,13 @@ class DiceLoss(nn.Module):
 
 
 class CombinedLoss(nn.Module):
-    def __init__(self, weight_dice=0.2, weight_mse=0.8):
+    def __init__(self, weight_dice=0.5, weight_mse=0.5, threshold=0.5):
         super(CombinedLoss, self).__init__()
         self.dice_loss = DiceLoss()
         self.mse_loss = nn.MSELoss()
         self.weight_dice = weight_dice
         self.weight_mse = weight_mse
+        self.threshold = threshold
 
     def forward(self, input1, target1, input2, target2):
         """
@@ -144,8 +145,12 @@ class CombinedLoss(nn.Module):
         :return: Weighted combined loss
         """
         loss_dice = self.dice_loss(input1, target1)
+        # Convert input1 to a binary mask
+        mask = (input1 > self.threshold).float()
+        # Use mask to mask input2
+        masked_input2 = input2 * mask
         target2 = target2.float()
-        loss_mse = self.mse_loss(input2, target2)
+        loss_mse = self.mse_loss(masked_input2, target2)
         return self.weight_dice * loss_dice + self.weight_mse * loss_mse
 
 
