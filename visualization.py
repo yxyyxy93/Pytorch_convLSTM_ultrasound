@@ -1,6 +1,7 @@
 import json
 
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
 import torch
 
 
@@ -39,35 +40,58 @@ def plot_orthoslices(ax, data, slice_idx):
     """
     Helper function to plot 3D data as orthoslices on given axes.
     """
-    # Extracting the slices
-    axial_slice = data[slice_idx[0], :, :]
-    coronal_slice = data[:, slice_idx[1], :]
-    sagittal_slice = data[:, :, slice_idx[2]]
+    if data.ndim == 3:  # For 3D data
+        def update(val):
+            slice_index = int(slider.val)
+            xy_slice = data[slice_index, :, :].squeeze()
+            ax[0].clear()
+            ax[0].imshow(xy_slice, cmap='gray')
+            ax[0].set_title('XY slice')
+            # fig.canvas.draw_idle()
 
-    # Axial slice
-    ax[0].imshow(axial_slice, cmap='gray')
-    ax[0].set_title(f'Axial Slice {slice_idx[0]}')
-    ax[0].axis('off')
+        depth, height, width = data.shape[0], data.shape[1], data.shape[2]
+        # Extracting the slices
+        axial_slice = data[slice_idx[0], :, :]
+        coronal_slice = data[:, slice_idx[1], :]
+        sagittal_slice = data[:, :, slice_idx[2]]
 
-    # Coronal slice
-    ax[1].imshow(coronal_slice, cmap='gray')
-    ax[1].set_title(f'Coronal Slice {slice_idx[1]}')
-    ax[1].axis('off')
+        # Axial slice
+        ax[0].imshow(axial_slice, cmap='gray', aspect='auto')
+        ax[0].set_title(f'Axial Slice {slice_idx[0]}')
+        ax[0].axis('off')
 
-    # Sagittal slice
-    ax[2].imshow(sagittal_slice, cmap='gray')
-    ax[2].set_title(f'Sagittal Slice {slice_idx[2]}')
-    ax[2].axis('off')
+        # Coronal slice
+        ax[1].imshow(coronal_slice, cmap='gray', aspect='auto')
+        ax[1].set_title(f'Coronal Slice {slice_idx[1]}')
+        ax[1].axis('off')
+
+        # Sagittal slice
+        ax[2].imshow(sagittal_slice, cmap='gray', aspect='auto')
+        ax[2].set_title(f'Sagittal Slice {slice_idx[2]}')
+        ax[2].axis('off')
+
+        # Create the slider
+        ax_slider = plt.axes([0.1, 0.02, 0.65, 0.03], facecolor='lightgoldenrodyellow')
+        slider = Slider(ax_slider, 'Slice', 0, depth - 1, valinit=depth // 2, valfmt='%0.0f')
+
+        slider.on_changed(update)
+
+    elif data.ndim == 2:  # For 2D data
+        ax.imshow(data, cmap='gray', aspect='auto')
+        ax.axis('off')
+    else:
+        raise ValueError("Data must be either 2D or 3D")
+
+    plt.show()
 
 
-def visualize_sample(gt_visual, output_visual, title="Ground Truth vs Output", slice_idx=(84, 29, 29)):
+def visualize_sample(gt_visual, output_visual, slice_idx=(84, 29, 29)):
     """
     Visualize 3D ground truth and output data as orthoslices.
 
     Args:
         gt_visual (torch.Tensor): The ground truth tensor.
         output_visual (torch.Tensor): The output tensor from the model.
-        title (str): Title for the plot.
         slice_idx (tuple): Indices for axial, coronal, and sagittal slices.
     """
     gt_np = gt_visual.detach().cpu().numpy()  # Convert to numpy array
@@ -80,88 +104,85 @@ def visualize_sample(gt_visual, output_visual, title="Ground Truth vs Output", s
     print("Output Statistics:")
     print(f"Max: {output_np.max()}, Min: {output_np.min()}, Mean: {output_np.mean()}, Std: {output_np.std()}")
 
-    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-    plt.suptitle(title)
-
-    # Plot Ground Truth Slices
-    plot_orthoslices(axes[0], gt_np, slice_idx)
-
+    fig, axes = plt.subplots(1, 1, figsize=(15, 10))
     # Plot Output Slices
-    plot_orthoslices(axes[1], output_np, slice_idx)
+    plot_orthoslices(axes, output_np, slice_idx)
 
-    plt.show()
+    fig, axes = plt.subplots(1, 3, figsize=(15, 10))
+    # Plot Ground Truth Slices
+    plot_orthoslices(axes, gt_np, slice_idx)
 
 
-if __name__ == "__main__":
-    import numpy as np
-    import os
-
-    # Set mode for testing
-    os.environ['MODE'] = 'test'
-    import config
-    import model  # model module
-    from test import load_test_dataset, load_checkpoint
-
-    # ------------- visualize some samples
-    # Initialize model
-    convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
-                                                        hidden_dim=config.hidden_dim,
-                                                        output_dim=config.output_dim,
-                                                        output_tl=config.output_tl,
-                                                        kernel_size=config.kernel_size,
-                                                        num_layers=config.num_layers).to(config.device)
-
-    results_dir = config.results_dir
-    fold_number = 2  # Change as needed
-    model_filename = "d_best.pth.tar"
-    model_path = os.path.join(results_dir, f"_fold {fold_number}", model_filename)
-    # Load model checkpoint
-    convLSTM_model = load_checkpoint(convLSTM_model, model_path)
-    # Prepare test dataset
-    test_loader = load_test_dataset()
-    for data in test_loader:
-        inputs = data['lr'].to(config.device)
-        gt = data['gt'].to(config.device)
-
-    # Generate output from the model
-    convLSTM_model.eval()
-    with torch.no_grad():
-        output = convLSTM_model(inputs)
-        sr = output[1]
-    gt = gt.squeeze()
-    sr = sr.squeeze()
-    # Apply argmax along the class dimension (c)
-    sr_3d = torch.argmax(sr, dim=1)
-    # Visualize the sample
-    visualize_sample(gt, sr_3d, slice_idx=(84, 10, 10))
-
-    # ------------- visualize the metrics
-    # Directory where the results are stored
-    num_folds = 5
-
-    # Initialize lists to store aggregated metrics
-    all_train_losses = []
-    all_val_losses = []
-    all_train_ssim_scores = []
-    all_val_ssim_scores = []
-
-    for fold in range(1, num_folds + 1):
-        results_file = os.path.join(results_dir, f'_fold {fold}', 'training_metrics.json')
-        if os.path.exists(results_file):
-            metrics = read_metrics(results_file)
-            all_train_losses.append(metrics['train_losses'])
-            all_val_losses.append(metrics['val_losses'])
-            all_train_ssim_scores.append(metrics['train_scores'])
-            all_val_ssim_scores.append(metrics['val_scores'])
-        else:
-            print(f"Metrics file for fold {fold} not found.")
-
-    # Calculate the average across all folds
-    avg_metrics = {
-        'avg_train_losses': np.mean(all_train_losses, axis=0),
-        'avg_val_losses': np.mean(all_val_losses, axis=0),
-        'avg_train_scores': np.mean(all_train_ssim_scores, axis=0),
-        'avg_val_scores': np.mean(all_val_ssim_scores, axis=0)
-    }
-
-    plot_metrics(avg_metrics, "Training and Validation")
+# if __name__ == "__main__":
+#     import numpy as np
+#     import os
+#
+#     # Set mode for testing
+#     os.environ['MODE'] = 'test'
+#     import config
+#     import model  # model module
+#     from test import load_test_dataset, load_checkpoint
+#
+#     # ------------- visualize some samples
+#     # Initialize model
+#     convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
+#                                                         hidden_dim=config.hidden_dim,
+#                                                         output_dim=config.output_dim,
+#                                                         output_tl=config.output_tl,
+#                                                         kernel_size=config.kernel_size,
+#                                                         num_layers=config.num_layers).to(config.device)
+#
+#     results_dir = config.results_dir
+#     fold_number = 1  # Change as needed
+#     model_filename = "d_best.pth.tar"
+#     model_path = os.path.join(results_dir, f"_fold {fold_number}", model_filename)
+#     # Load model checkpoint
+#     convLSTM_model = load_checkpoint(convLSTM_model, model_path)
+#     # Prepare test dataset
+#     test_loader = load_test_dataset()
+#     for data in test_loader:
+#         inputs = data['lr'].to(config.device)
+#         gt = data['gt'].to(config.device)
+#
+#     # Generate output from the model
+#     convLSTM_model.eval()
+#     with torch.no_grad():
+#         output = convLSTM_model(inputs)
+#         sr = output[1]
+#     gt = gt.squeeze()
+#     sr = sr.squeeze()
+#     # Apply argmax along the class dimension (c)
+#     sr_3d = torch.argmax(sr, dim=1)
+#     # Visualize the sample
+#     visualize_sample(gt, sr_3d, slice_idx=(84, 10, 10))
+#
+#     # ------------- visualize the metrics
+#     # Directory where the results are stored
+#     num_folds = 1
+#
+#     # Initialize lists to store aggregated metrics
+#     all_train_losses = []
+#     all_val_losses = []
+#     all_train_ssim_scores = []
+#     all_val_ssim_scores = []
+#
+#     for fold in range(1, num_folds + 1):
+#         results_file = os.path.join(results_dir, f'_fold {fold}', 'training_metrics.json')
+#         if os.path.exists(results_file):
+#             metrics = read_metrics(results_file)
+#             all_train_losses.append(metrics['train_losses'])
+#             all_val_losses.append(metrics['val_losses'])
+#             all_train_ssim_scores.append(metrics['train_scores'])
+#             all_val_ssim_scores.append(metrics['val_scores'])
+#         else:
+#             print(f"Metrics file for fold {fold} not found.")
+#
+#     # Calculate the average across all folds
+#     avg_metrics = {
+#         'avg_train_losses': np.mean(all_train_losses, axis=0),
+#         'avg_val_losses': np.mean(all_val_losses, axis=0),
+#         'avg_train_scores': np.mean(all_train_ssim_scores, axis=0),
+#         'avg_val_scores': np.mean(all_val_ssim_scores, axis=0)
+#     }
+#
+#     plot_metrics(avg_metrics, "Training and Validation")

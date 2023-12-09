@@ -113,9 +113,12 @@ class DiceLoss(nn.Module):
         super(DiceLoss, self).__init__()
 
     def forward(self, inputs, targets, smooth=1):
+        # Apply sigmoid to the inputs
+        inputs = torch.sigmoid(inputs)
+
         # Flatten label and prediction tensors
-        inputs = inputs.view(-1)
-        targets = targets.view(-1)
+        inputs = inputs.reshape(-1)
+        targets = targets.reshape(-1)
 
         intersection = (inputs * targets).sum()
         dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
@@ -201,22 +204,38 @@ class PixelAccuracy(nn.Module):
 
     def forward(self, y_pred, y_true):
         """
-        Calculate pixel accuracy for multi-class segmentation.
-        :param y_pred: The prediction tensor of shape [B, D, C, H, W]
-        :param y_true: The ground truth tensor of shape [B, D, H, W]
-        :return: Pixel accuracy
-        """
-        # Reshape y_pred to match the shape of y_true
-        # Merge B and D dimensions for y_pred and y_true
-        B, D, C, H, W = y_pred.shape
-        y_pred = y_pred.view(B * D, C, H, W)
-        y_true = y_true.view(B * D, H, W)
-
+            Calculate pixel accuracy for multi-class segmentation.
+            :param y_pred: The prediction tensor of shape [B, H, W]
+            :param y_true: The ground truth tensor of shape [B, H, W]
+            :return: Pixel accuracy
+            """
         # Get the predicted class for each pixel
-        _, predicted = torch.max(y_pred, 1)
+        threshold = 0.5
+        predicted = (y_pred > threshold).long()
 
         # Calculate accuracy for each class
         correct = (predicted == y_true).sum()
         total = y_true.numel()
 
         return correct.float() / total
+
+
+# Example usage
+if __name__ == "__main__":
+    # Dummy data
+    batch_size = 4
+    predictions = torch.randn(batch_size, 1, 16, 16)  # Model's raw output (logits)
+    targets = torch.randint(0, 2, (batch_size, 1, 16, 16)).float()  # Binary targets
+
+    # Create an instance of the DiceLoss
+    dice_loss = DiceLoss()
+
+    # Calculate loss
+    loss = dice_loss(predictions, targets)
+    print("Dice Loss:", loss.item())
+
+    # Create an instance of PixelAccuracy
+    pixel_acc = PixelAccuracy()
+    # Calculate accuracy
+    accuracy = pixel_acc(predictions, targets)
+    print("Pixel Accuracy:", accuracy.item())

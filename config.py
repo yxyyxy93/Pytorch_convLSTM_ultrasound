@@ -32,7 +32,7 @@ np.random.seed(0)
 device = show_cuda_gpu_info()
 
 # Model arch config
-input_dim = 1
+input_dim = 256
 hidden_dim = 64
 kernel_size = (3, 3)
 output_dim = 2  # 2 or more classes
@@ -40,10 +40,10 @@ output_tl = 168  # the depth length
 num_layers = 4
 
 # ------------- choose from models
-d_arch_name = "ConvLSTM"
+d_arch_name = "UNet"
 
 # ---------- choose from loss functions
-loss_function = "myCrossEntropyLoss"  # Options: myCrossEntropyLoss, MulticlassDiceLoss, etc.
+loss_function = "DiceLoss"  # Options: myCrossEntropyLoss, MulticlassDiceLoss, etc.
 val_function = "PixelAccuracy"
 
 # Experiment name, easy to save weights and log files
@@ -63,7 +63,7 @@ if mode == "train":
     image_dir = r'.\dataset\sim_data'  # path to the 'sim_data' directory
     label_dir = r'.\dataset\sim_struct'  # path to the 'sim_struct' directory
 
-    batch_size = 16
+    batch_size = 8
     num_workers = 4
 
     # The address to load the pretrained model
@@ -100,4 +100,4 @@ elif mode == "test":
     label_dir = r'.\dataset\sim_struct'  # path to the 'sim_struct' directory
 
     # Constructing the path
-    results_dir = os.path.join("results", f"{exp_name}_2023-12-06")
+    results_dir = os.path.join("results", f"{exp_name}_2023-12-07")

@@ -3,17 +3,17 @@
 # Nanyang Technological University
 # 2023
 # ==============================================================================
-import os
 import queue
 import threading
-import matplotlib.pyplot as plt
-import numpy as np
 
+import matplotlib.pyplot as plt
 import torch
+import os
+import numpy as np
 from torch.utils.data import Dataset, DataLoader
 
-from utils.Read_CSV import read_csv_to_3d_array
 from utils import imgproc
+from utils.Read_CSV import read_csv_to_3d_array
 
 __all__ = [
     "TrainValidImageDataset",
@@ -71,22 +71,32 @@ class TrainValidImageDataset(Dataset):
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
-        new_shape = image_noisy.shape
+        new_shape = [16, 16, 256]
+        # ###  important as this func reverse the w and h dimension
+        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape)
 
-        # Normalize and add a channel dimension if necessary
-        image_noisy = imgproc.normalize_and_add_channel(image_noisy)
+        image_noisy = imgproc.normalize(image_noisy)
 
-        image_origin = image_origin - image_origin.min()  # to 0, 1, 2...
-        image_origin = np.where((image_origin == 1) | (image_origin == 2), 1, image_origin)  # change to 2 classes !
-        image_origin = imgproc.resample_3d_array_numpy(image_origin, new_shape)
+        W, H, _ = new_shape  # Assuming image_origin has shape [T, W, H]
+        # First Tensor: Location of Class 1 in terms of W and H
+        location_matrix = np.any(image_origin == 7, axis=0)  # Shape: [W, H]
+        # Second Tensor: Depth of Class 1 in terms of T axis
+        depth_matrix = np.zeros((W, H))  # Initialize with zeros
+        for w in range(W):
+            for h in range(H):
+                t_indices = np.nonzero(image_origin[:, w, h] == 7)[0]
+                if len(t_indices) > 0:
+                    depth_matrix[w, h] = t_indices[0]  # Assign the earliest T index
 
-        # Convert to PyTorch tensors
+        # Convert location and depth matrices, and noisy image to PyTorch tensors
+        location_tensor = torch.from_numpy(location_matrix).long()
+        depth_tensor = torch.from_numpy(depth_matrix).long()
         noisy_tensor = torch.from_numpy(image_noisy).float()
-        origin_tensor = torch.from_numpy(image_origin).float()
 
-        origin_tensor = torch.squeeze(origin_tensor)
+        # Stack location and depth tensors to create a combined tensor
+        combined_tensor = torch.stack([location_tensor, depth_tensor], dim=0)  # Shape: [2, W, H]
 
-        return {"gt": origin_tensor, "lr": noisy_tensor}
+        return {"gt": combined_tensor, "lr": noisy_tensor}
 
     def __len__(self) -> int:
         return len(self.dataset_label_mapping)
@@ -127,27 +137,36 @@ class TestDataset(Dataset):
     def __getitem__(self, index: int) -> [torch.Tensor, torch.Tensor]:
         dataset_file = list(self.dataset_label_mapping.keys())[index]
         label_file = self.dataset_label_mapping[dataset_file]
-
         # Load the images
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
-        new_shape = image_noisy.shape
+        new_shape = [16, 16, 256]
+        # ###  important as this func reverse the w and h dimension
+        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape)
 
-        # Normalize and add a channel dimension if necessary
-        image_noisy = imgproc.normalize_and_add_channel(image_noisy)
+        image_noisy = imgproc.normalize(image_noisy)
 
-        image_origin = image_origin - image_origin.min()  # to 0, 1, 2...
-        image_origin = np.where((image_origin == 1) | (image_origin == 2), 1, image_origin)  # change to 2 classes !
-        image_origin = imgproc.resample_3d_array_numpy(image_origin, new_shape)
+        W, H, _ = new_shape  # Assuming image_origin has shape [T, W, H]
+        # First Tensor: Location of Class 1 in terms of W and H
+        location_matrix = np.any(image_origin == 7, axis=0)  # Shape: [W, H]
+        # Second Tensor: Depth of Class 1 in terms of T axis
+        depth_matrix = np.zeros((W, H))  # Initialize with zeros
+        for w in range(W):
+            for h in range(H):
+                t_indices = np.nonzero(image_origin[:, w, h] == 7)[0]
+                if len(t_indices) > 0:
+                    depth_matrix[w, h] = t_indices[0]  # Assign the earliest T index
 
-        # Convert to PyTorch tensors
+        # Convert location and depth matrices, and noisy image to PyTorch tensors
+        location_tensor = torch.from_numpy(location_matrix).long()
+        depth_tensor = torch.from_numpy(depth_matrix).long()
         noisy_tensor = torch.from_numpy(image_noisy).float()
-        origin_tensor = torch.from_numpy(image_origin).float()
 
-        origin_tensor = torch.squeeze(origin_tensor)
+        # Stack location and depth tensors to create a combined tensor
+        combined_tensor = torch.stack([location_tensor, depth_tensor], dim=0)  # Shape: [2, W, H]
 
-        return {"gt": origin_tensor, "lr": noisy_tensor}
+        return {"gt": combined_tensor, "lr": noisy_tensor}
 
     def __len__(self) -> int:
         return len(self.dataset_label_mapping)
@@ -296,12 +315,11 @@ def show_dataset_info(data_loader, show_sample_slices=False):
             yz_slice = sample[:, :, :, width // 2].squeeze()
             xz_slice = sample[:, :, height // 2, :].squeeze()
 
-            # Plotting
-            plt.figure(figsize=(12, 4))
+            fig, _ = plt.subplots(1, 3, figsize=(15, 4))  # Adjust for an additional subplot for the slider
 
-            plt.subplot(1, 3, 1)
-            plt.imshow(xy_slice.cpu().numpy(), cmap='gray')
-            plt.title('XY slice')
+            ax1 = plt.subplot(1, 3, 1)
+            ax1.imshow(xy_slice.cpu().numpy(), cmap='gray')
+            ax1.set_title('XY slice')
 
             plt.subplot(1, 3, 2)
             plt.imshow(yz_slice.cpu().numpy(), cmap='gray')
@@ -314,3 +332,28 @@ def show_dataset_info(data_loader, show_sample_slices=False):
             plt.show()
 
     print("Total number of samples:", total_samples)
+
+
+# if __name__ == "__main__":
+#     import numpy as np
+#     import os
+#
+#     # Set mode for testing
+#     os.environ['MODE'] = 'test'
+#     import config
+#     from visualization import visualize_sample
+#
+#     # ------------- visualize some samples
+#     # Prepare test dataset
+#     test_dataset = TestDataset(config.image_dir, config.label_dir)  # Adjust as per your dataset class
+#     test_loader = DataLoader(test_dataset, batch_size=1,
+#                              shuffle=False)  # Adjust batch_size and other parameters as needed
+#
+#     for data in test_loader:
+#         input = data['lr'].to(config.device)
+#         gt = data['gt'].to(config.device)
+#
+#     print(input.shape)
+#     print(gt.shape)
+#     # Visualize the sample
+#     visualize_sample(input.squeeze(), gt.squeeze()[0, :], slice_idx=(84, 8, 8))
