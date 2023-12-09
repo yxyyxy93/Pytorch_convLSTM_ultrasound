@@ -126,6 +126,29 @@ class DiceLoss(nn.Module):
         return 1 - dice
 
 
+class CombinedLoss(nn.Module):
+    def __init__(self, weight_dice=0.2, weight_mse=0.8):
+        super(CombinedLoss, self).__init__()
+        self.dice_loss = DiceLoss()
+        self.mse_loss = nn.MSELoss()
+        self.weight_dice = weight_dice
+        self.weight_mse = weight_mse
+
+    def forward(self, input1, target1, input2, target2):
+        """
+        Calculate the combined Dice and MSE loss.
+        :param input1: The input tensor for DiceLoss
+        :param target1: The target tensor for DiceLoss
+        :param input2: The input tensor for MSELoss
+        :param target2: The target tensor for MSELoss
+        :return: Weighted combined loss
+        """
+        loss_dice = self.dice_loss(input1, target1)
+        target2 = target2.float()
+        loss_mse = self.mse_loss(input2, target2)
+        return self.weight_dice * loss_dice + self.weight_mse * loss_mse
+
+
 class IoU(nn.Module):
     def __init__(self, smooth=1e-6):
         super(IoU, self).__init__()
@@ -239,3 +262,17 @@ if __name__ == "__main__":
     # Calculate accuracy
     accuracy = pixel_acc(predictions, targets)
     print("Pixel Accuracy:", accuracy.item())
+
+    # Dummy data for the example
+    input1 = torch.randn(4, 1, 16, 16)  # Example input for DiceLoss
+    target1 = torch.randint(0, 2, (4, 1, 16, 16)).float()  # Example target for DiceLoss
+
+    input2 = torch.randn(4, 1, 16, 16)  # Example input for MSELoss
+    target2 = torch.randn(4, 1, 16, 16)  # Example target for MSELoss
+
+    # Initialize the combined loss with weights
+    combined_loss_function = CombinedLoss(weight_dice=0.5, weight_mse=0.5)
+
+    # Calculate combined loss
+    combined_loss = combined_loss_function(input1, target1, input2, target2)
+    print("Weighted Combined Loss:", combined_loss.item())

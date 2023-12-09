@@ -255,11 +255,11 @@ def train(
 
         with amp.autocast():
             output = train_model(lr)
-            output = output[:, 0]  # only x-y location : [B, 1, w, h]
-            gt = gt[:, 0]  # only x-y location : [B, 1, w, h]
+            # output = output[:, 0]  # only x-y location : [B, 1, w, h]
+            # gt = gt[:, 0]  # only x-y location : [B, 1, w, h]
             gt = gt.long()  # Ensure ground truth is of type long
-            loss = criterion(output, gt)
-            score = val_crite(output, gt)  # Compute
+            loss = criterion(output[:, 0], gt[:, 0], output[:, 1], gt[:, 1])
+            score = val_crite(output[:, 0], gt[:, 0])  # Compute
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -310,8 +310,8 @@ def validate(
                 output = output[:, 0]  # only x-y location : [B, 1, w, h]
                 gt = gt[:, 0]  # only x-y location : [B, 1, w, h]
                 gt = gt.long()  # Ensure ground truth is of type long
-                loss = criterion(output, gt)
-                score = val_crite(output, gt)  # Compute
+                loss = criterion(output[:, 0], gt[:, 0], output[:, 1], gt[:, 1])
+                score = val_crite(output[:, 0], gt[:, 0])  # Compute
 
             losses.update(loss.item(), lr.size(0))  # Update loss meter
             scores.update(score.item(), lr.size(0))

@@ -43,11 +43,11 @@ num_layers = 4
 d_arch_name = "UNet"
 
 # ---------- choose from loss functions
-loss_function = "DiceLoss"  # Options: myCrossEntropyLoss, MulticlassDiceLoss, etc.
+loss_function = "CombinedLoss"  # Options: myCrossEntropyLoss, MulticlassDiceLoss, DiceLoss, etc.
 val_function = "PixelAccuracy"
 
 # Experiment name, easy to save weights and log files
-exp_name = d_arch_name + "_baseline"
+exp_name = d_arch_name + "_" + loss_function
 
 # How many iterations to print the training result
 train_print_frequency = 2
@@ -100,4 +100,4 @@ elif mode == "test":
     label_dir = r'.\dataset\sim_struct'  # path to the 'sim_struct' directory
 
     # Constructing the path
-    results_dir = os.path.join("results", f"{exp_name}_2023-12-07")
+    results_dir = os.path.join("results", f"{exp_name}_2023-12-09")

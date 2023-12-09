@@ -88,6 +88,8 @@ class TrainValidImageDataset(Dataset):
                 if len(t_indices) > 0:
                     depth_matrix[w, h] = t_indices[0]  # Assign the earliest T index
 
+        depth_matrix = imgproc.normalize(depth_matrix)
+
         # Convert location and depth matrices, and noisy image to PyTorch tensors
         location_tensor = torch.from_numpy(location_matrix).long()
         depth_tensor = torch.from_numpy(depth_matrix).long()
@@ -334,26 +336,27 @@ def show_dataset_info(data_loader, show_sample_slices=False):
     print("Total number of samples:", total_samples)
 
 
-# if __name__ == "__main__":
-#     import numpy as np
-#     import os
-#
-#     # Set mode for testing
-#     os.environ['MODE'] = 'test'
-#     import config
-#     from visualization import visualize_sample
-#
-#     # ------------- visualize some samples
-#     # Prepare test dataset
-#     test_dataset = TestDataset(config.image_dir, config.label_dir)  # Adjust as per your dataset class
-#     test_loader = DataLoader(test_dataset, batch_size=1,
-#                              shuffle=False)  # Adjust batch_size and other parameters as needed
-#
-#     for data in test_loader:
-#         input = data['lr'].to(config.device)
-#         gt = data['gt'].to(config.device)
-#
-#     print(input.shape)
-#     print(gt.shape)
-#     # Visualize the sample
-#     visualize_sample(input.squeeze(), gt.squeeze()[0, :], slice_idx=(84, 8, 8))
+if __name__ == "__main__":
+    import numpy as np
+    import os
+
+    # Set mode for testing
+    os.environ['MODE'] = 'train'
+    import config
+    from visualization import visualize_sample
+
+    # ------------- visualize some samples
+    # Prepare test dataset
+    test_dataset = TestDataset(config.image_dir, config.label_dir)  # Adjust as per your dataset class
+    test_loader = DataLoader(test_dataset, batch_size=1,
+                             shuffle=False)  # Adjust batch_size and other parameters as needed
+
+    for data in test_loader:
+        input = data['lr'].to(config.device)
+        gt = data['gt'].to(config.device)
+
+    print(input.shape)
+    print(gt.shape)
+    # Visualize the sample
+    visualize_sample(input.squeeze(), gt.squeeze()[0, :], slice_idx=(84, 8, 8))
+    visualize_sample(input.squeeze(), gt.squeeze()[1, :], slice_idx=(84, 8, 8))
