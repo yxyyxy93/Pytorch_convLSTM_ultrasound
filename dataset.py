@@ -71,13 +71,13 @@ class TrainValidImageDataset(Dataset):
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
-        new_shape = [16, 16, 256]
-        # ###  important as this func reverse the w and h dimension
-        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape)
+        new_shape = [21, 21, 256]  # smaller size to match both dataset: image_noisy
+        section_shape = [16, 16, 256]  # random select a section
+        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape, section_shape)
 
         image_noisy = imgproc.normalize(image_noisy)
 
-        W, H, _ = new_shape  # Assuming image_origin has shape [T, W, H]
+        W, H, _ = section_shape  # Assuming image_origin has shape [T, W, H]
         # First Tensor: Location of Class 1 in terms of W and H
         location_matrix = np.any(image_origin == 7, axis=0)  # Shape: [W, H]
         # Second Tensor: Depth of Class 1 in terms of T axis
@@ -143,13 +143,13 @@ class TestDataset(Dataset):
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
-        new_shape = [16, 16, 256]
-        # ###  important as this func reverse the w and h dimension
-        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape)
+        new_shape = [21, 21, 256]  # smaller size to match both dataset: image_noisy
+        section_shape = [16, 16, 256]  # random select a section
+        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape, section_shape)
 
         image_noisy = imgproc.normalize(image_noisy)
 
-        W, H, _ = new_shape  # Assuming image_origin has shape [T, W, H]
+        W, H, _ = section_shape  # Assuming image_origin has shape [T, W, H]
         # First Tensor: Location of Class 1 in terms of W and H
         location_matrix = np.any(image_origin == 7, axis=0)  # Shape: [W, H]
         # Second Tensor: Depth of Class 1 in terms of T axis
@@ -355,8 +355,8 @@ if __name__ == "__main__":
         input = data['lr'].to(config.device)
         gt = data['gt'].to(config.device)
 
-    print(input.shape)
-    print(gt.shape)
-    # Visualize the sample
-    visualize_sample(input.squeeze(), gt.squeeze()[0, :], slice_idx=(84, 8, 8))
-    visualize_sample(input.squeeze(), gt.squeeze()[1, :], slice_idx=(84, 8, 8))
+        print(input.shape)
+        print(gt.shape)
+        # Visualize the sample
+        visualize_sample(input.squeeze(), gt.squeeze()[0, :], slice_idx=(84, 8, 8))
+        # visualize_sample(input.squeeze(), gt.squeeze()[1, :], slice_idx=(84, 8, 8))

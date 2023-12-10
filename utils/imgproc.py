@@ -4,6 +4,7 @@
 # ==============================================================================
 
 import numpy as np
+import random
 
 __all__ = [
     "normalize",
@@ -16,20 +17,24 @@ def normalize(image):
     return image
 
 
-def resample_3d_array_numpy(image_origin, image_noisy, new_shape):
+def resample_3d_array_numpy(image_origin, image_noisy, new_shape, section_shape):
     """
-    Resample a 3D array to a new shape using simple nearest neighbor interpolation.
-    Only resamples the height and width dimensions, keeping the depth unchanged.
+       Resample a 3D array to a new shape using simple nearest neighbor interpolation and then
+       randomly select a section of the new shape.
 
-    Args:
-        data (numpy.ndarray):
-        new_shape (tuple):
+       Args:
+           image_origin (numpy.ndarray): The original image array.
+           image_noisy (numpy.ndarray): The noisy image array.
+           new_shape (tuple): The new shape for resampling.
+           section_shape (tuple): The shape of the section to be randomly selected.
 
-    Returns:
-        numpy.ndarray: The resampled 3D array with shape
-    """
+       Returns:
+           numpy.ndarray: The resampled and sectioned 3D arrays.
+       """
     new_H, new_W, new_D = new_shape
+    section_H, section_W, section_D = section_shape
 
+    # Resample
     H_orig, W_orig, D = image_origin.shape
     # Compute the ratio for the height and width dimensions
     ratio_h = H_orig / new_H
@@ -60,4 +65,19 @@ def resample_3d_array_numpy(image_origin, image_noisy, new_shape):
                 # Assign the value from the nearest neighbor
                 resampled_image_noisy[d, h, w] = image_noisy[orig_h, orig_w, d]
 
-    return resampled_image_origin, resampled_image_noisy
+    # Randomly select a starting point for the section
+    start_h = random.randint(0, new_H - section_H)
+    start_w = random.randint(0, new_W - section_W)
+    start_d = random.randint(0, new_D - section_D)
+
+    # Extract the section from the resampled images
+    section_image_origin = resampled_image_origin[
+                           start_d:start_d + section_D,
+                           start_h:start_h + section_H,
+                           start_w:start_w + section_W]
+    section_image_noisy = resampled_image_noisy[
+                          start_d:start_d + section_D,
+                          start_h:start_h + section_H,
+                          start_w:start_w + section_W]
+
+    return section_image_origin, section_image_noisy
