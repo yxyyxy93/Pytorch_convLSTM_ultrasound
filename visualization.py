@@ -126,13 +126,15 @@ if __name__ == "__main__":
 
     # ------------- visualize some samples
     # Initialize model
-    model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
-                                               hidden_dim=config.hidden_dim,
-                                               output_dim=config.output_dim,
-                                               output_tl=config.output_tl,
-                                               kernel_size=config.kernel_size,
-                                               num_layers=config.num_layers).to(config.device)
-    model = model.to(device=config.device)
+    convLSTMmodel = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
+                                                       hidden_dim=config.hidden_dim,
+                                                       new_channel=config.output_dim,
+                                                       new_seq_len=config.output_tl,
+                                                       kernel_size=config.kernel_size,
+                                                       num_layers=config.num_layers,
+                                                       batch_first=True).to(config.device)
+
+    model = convLSTMmodel.to(device=config.device)
 
     results_dir = config.results_dir
     fold_number = 5  # Change as needed
@@ -153,8 +155,8 @@ if __name__ == "__main__":
         output = convLSTM_model(inputs)
 
     # Visualize the sample
-    visualize_sample(output[:, 0].squeeze(), gt[:, 0].squeeze(), slice_idx=(128, 8, 8))
-    visualize_sample(output[:, 1].squeeze(), gt[:, 1].squeeze(), slice_idx=(128, 8, 8))
+    visualize_sample(output[:, :, 0].squeeze(), gt[:, 0].squeeze(), slice_idx=(128, 8, 8))
+    visualize_sample(output[:, :, 1].squeeze(), gt[:, 1].squeeze(), slice_idx=(128, 8, 8))
 
     # ------------- visualize the metrics
     # Directory where the results are stored

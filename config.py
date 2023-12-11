@@ -47,7 +47,9 @@ loss_function = "CombinedLoss"  # Options: DiceLoss, myCrossEntropyLoss, Multicl
 val_function = "PixelAccuracy"
 
 # Experiment name, easy to save weights and log files
-exp_name = d_arch_name + '_' + loss_function
+exp_name = d_arch_name + "_" + loss_function
+# Constructing the path
+results_dir = os.path.join("results", f"{exp_name}_2023-12-11")
 
 # How many iterations to print the training result
 train_print_frequency = 2
@@ -98,6 +100,3 @@ elif mode == "test":
     # Test data address To be modified ...
     image_dir = r'.\dataset\sim_data'  # path to the 'sim_data' directory
     label_dir = r'.\dataset\sim_struct'  # path to the 'sim_struct' directory
-
-    # Constructing the path
-    results_dir = os.path.join("results", f"{exp_name}_2023-12-08")

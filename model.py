@@ -220,16 +220,17 @@ class ResizeAndSelectLastK(nn.Module):
         # Process each tensor in the list
         processed_outputs = []
         for output in layer_output_list:
-            B, T, C, H, W = output.shape
-            pooled_output = torch.zeros(B, self.k, C, H, W, device=output.device)
-
-            # Calculate the number of original time steps to combine for one output time step
-            step = T / self.k
-            # Average the time steps for each output time step
-            for i in range(self.k):
-                start_idx = int(i * step)
-                end_idx = int((i + 1) * step)
-                pooled_output[:, i, :, :, :] = output[:, start_idx:end_idx, :, :, :].mean(dim=1)
+            pooled_output = output[:, -self.k:,:,:,:]
+            # B, T, C, H, W = output.shape
+            # pooled_output = torch.zeros(B, self.k, C, H, W, device=output.device)
+            #
+            # # Calculate the number of original time steps to combine for one output time step
+            # step = T / self.k
+            # # Average the time steps for each output time step
+            # for i in range(self.k):
+            #     start_idx = int(i * step)
+            #     end_idx = int((i + 1) * step)
+            #     pooled_output[:, i, :, :, :] = output[:, start_idx:end_idx, :, :, :].mean(dim=1)
 
             # output 0~1
             processed_outputs.append(pooled_output)

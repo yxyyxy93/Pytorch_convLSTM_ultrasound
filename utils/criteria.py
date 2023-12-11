@@ -151,7 +151,7 @@ class CombinedLoss(nn.Module):
         # Use mask to mask input2
         masked_input2 = input2 * mask
         target2 = target2.float()
-        loss_mse = self.mse_loss(masked_input2, target2)
+        loss_mse = self.mse_loss(masked_input2.squeeze(), target2.squeeze())
         return self.weight_dice * loss_dice + self.weight_mse * loss_mse
 
 
