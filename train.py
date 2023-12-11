@@ -10,6 +10,7 @@ from torch import nn
 from torch import optim
 from torch.cuda import amp
 from torch.optim import lr_scheduler
+from torch.optim.lr_scheduler import MultiStepLR
 from torch.optim.swa_utils import AveragedModel
 from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
@@ -27,11 +28,6 @@ from utils import criteria
 os.environ['MODE'] = 'train'
 import config
 import model
-import model_unet3d
-
-model_names = sorted(
-    name for name in model.__dict__ if
-    name.islower() and not name.startswith("__") and callable(model.__dict__[name]))
 
 
 def main():
@@ -40,28 +36,19 @@ def main():
     # Initialize the number of training epochs
     start_epoch = 0
     print("Load all datasets successfully.")
-    # show_dataset_info(train_prefetcher, show_sample_slices=True)
-    convLSTM_model, ema_convLSTM_model = build_model()
+    # show_dataset_info(train_prefetcher, show_sample_slices=False)
+    convLSTM_model, ema_model = build_model()
     print(f"Build `{config.d_arch_name}` model successfully.")
-
     # get the loss function class based on the string name
     criterion = getattr(criteria, config.loss_function)()
     criterion = criterion.to(device=config.device)
     val_crite = getattr(criteria, config.val_function)()
     val_crite = val_crite.to(device=config.device)
     print("Define all loss functions successfully.")
-    optimizer = optim.Adam(convLSTM_model.parameters(),
-                               config.model_lr,
-                               config.model_betas,
-                               config.model_eps,
-                               config.model_weight_decay)
+    optimizer = define_optimizer(convLSTM_model)
     print("Define all optimizer functions successfully.")
-
-    scheduler = lr_scheduler.MultiStepLR(optimizer=optimizer,
-                                             milestones=config.lr_scheduler_milestones,
-                                             gamma=config.lr_scheduler_gamma)
+    scheduler = define_scheduler(optimizer)
     print("Define all optimizer scheduler functions successfully.")
-
     print("Check whether to load pretrained model weights...")
     if config.pretrained_d_model_weights_path:
         convLSTM_model = load_state_dict(convLSTM_model, config.pretrained_d_model_weights_path)
@@ -71,31 +58,36 @@ def main():
 
     print("Check whether the pretrained model is restored...")
     if config.resume_d_model_weights_path:
-        convLSTM_model, ema_convLSTM_model, start_epoch, optimizer, scheduler = load_state_dict(
-                convLSTM_model,
-                config.pretrained_d_model_weights_path,
-                ema_convLSTM_model,
-                optimizer,
-                scheduler,
-                "resume")
+        convLSTM_model, ema_model, start_epoch, optimizer, scheduler = load_state_dict(
+            convLSTM_model,
+            config.pretrained_d_model_weights_path,
+            ema_model,
+            optimizer,
+            scheduler,
+            "resume")
         print("Loaded pretrained model weights.")
     else:
         print("Resume training model not found. Start training from scratch.")
-
-    # Get current date
-    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-
-    # Create training process log file
-    writer = SummaryWriter(os.path.join("logs", config.exp_name))
-
-    # Initialize the gradient scaler
-    scaler = amp.GradScaler(enabled=torch.cuda.is_available())
     # Iterate over each fold
     for fold, (train_prefetcher, val_prefetcher) in enumerate(dataloaders_per_fold):
         print(f"Starting training on fold {fold + 1}")
+        # Printing the size of train and validation data
+        train_data_size = len(train_prefetcher)
+        val_data_size = len(val_prefetcher)
+        print(f"Size of Training Data: {train_data_size}, Size of Validation Data: {val_data_size}")
+        # Get current date
+        current_date = datetime.datetime.now().strftime("%Y-%m-%d")
         # Create a experiment results
-        results_dir = os.path.join("results", f"{config.exp_name}_{current_date}", f"_fold {fold + 1}")
+        results_dir = os.path.join("./results", f"{config.exp_name}_{current_date}",
+                                   f"_fold {fold + 1}")
         make_directory(results_dir)
+
+        # Create training process log file
+        writer = SummaryWriter(os.path.join("./logs", config.exp_name))
+
+        # Initialize the gradient scaler
+        scaler = amp.GradScaler(enabled=torch.cuda.is_available())
+
         # Initialize lists to store metrics for each epoch
         best_score = 0
         epoch_train_losses = []
@@ -105,19 +97,19 @@ def main():
 
         for epoch in range(start_epoch, config.epochs):
             avg_train_loss, avg_train_score = train(convLSTM_model,
-                                                    ema_convLSTM_model,
+                                                    ema_model,
                                                     train_prefetcher,
                                                     criterion,
                                                     optimizer,
                                                     epoch,
                                                     scaler,
                                                     writer,
-                                                    val_crite)  # Pass model to train
+                                                    val_crite)  # Pass the SSIM model to train
             avg_val_loss, avg_val_score = validate(convLSTM_model,
                                                    val_prefetcher,
                                                    epoch,
                                                    writer,
-                                                   criterion,  # validate
+                                                   criterion,  # Pass the loss criterion to validate
                                                    val_crite,
                                                    "Val")
 
@@ -150,7 +142,7 @@ def main():
             save_checkpoint({"epoch": epoch + 1,
                              "best_score": best_score,
                              "state_dict": convLSTM_model.state_dict(),
-                             "ema_state_dict": ema_convLSTM_model.state_dict(),
+                             "ema_state_dict": ema_model.state_dict(),
                              "optimizer": optimizer.state_dict(),
                              "scheduler": scheduler.state_dict()},
                             results_dir=results_dir,
@@ -205,34 +197,58 @@ def load_dataset(num_folds=5) -> list:
 
 
 def build_model() -> [nn.Module, nn.Module]:
-    convLSTM_model = model_unet3d.UNet3D(in_channels=config.input_dim, num_classes=config.output_dim)
+    convLSTMmodel = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
+                                                       hidden_dim=config.hidden_dim,
+                                                       new_channel=config.output_dim,
+                                                       new_seq_len=config.output_tl,
+                                                       kernel_size=config.kernel_size,
+                                                       num_layers=config.num_layers,
+                                                       batch_first=True).to(config.device)
 
-    convLSTM_model = convLSTM_model.to(device=config.device)
+    convLSTMmodel = convLSTMmodel.to(device=config.device)
 
     # Create an Exponential Moving Average Model
     ema_avg = lambda averaged_model_parameter, model_parameter, num_averaged: \
         (1 - config.model_ema_decay) * averaged_model_parameter + config.model_ema_decay * model_parameter
-    ema_convLSTM_model = AveragedModel(convLSTM_model, avg_fn=ema_avg)
+    ema_model = AveragedModel(convLSTMmodel, avg_fn=ema_avg)
 
-    return convLSTM_model, ema_convLSTM_model
+    return convLSTMmodel, ema_model
+
+
+def define_optimizer(model_train) -> optim.Adam:
+    optimizer = optim.Adam(model_train.parameters(),
+                           config.model_lr,
+                           config.model_betas,
+                           config.model_eps,
+                           config.model_weight_decay)
+
+    return optimizer
+
+
+def define_scheduler(optimizer) -> MultiStepLR:
+    scheduler = lr_scheduler.MultiStepLR(optimizer=optimizer,
+                                         milestones=config.lr_scheduler_milestones,
+                                         gamma=config.lr_scheduler_gamma)
+
+    return scheduler
 
 
 def train(
         train_model: nn.Module,
-        ema_convLSTM_model: nn.Module,
+        ema_model: nn.Module,
         train_prefetcher: CUDAPrefetcher,
         criterion: nn.MSELoss,
         optimizer: optim.Adam,
         epoch: int,
         scaler: amp.GradScaler,
         writer: SummaryWriter,
-        val_crite: any  # Add the score computation function
-) -> (float, float):  # Change return type to include both loss and score
+        val_crite: any  # Add the SSIM computation function
+) -> (float, float):  # Change return type to include both loss and SSIM
     batches = len(train_prefetcher)
     batch_time = AverageMeter("Time", ":6.3f")
     data_time = AverageMeter("Data", ":6.3f")
     losses = AverageMeter("Loss", ":6.6f")
-    scores = AverageMeter("Score", ":6.6f")  # New meter for score
+    scores = AverageMeter("Score", ":6.6f")  # New meter for SSIM
     progress = ProgressMeter(batches, [batch_time, data_time, losses, scores], prefix=f"Epoch: [{epoch + 1}]")
 
     train_model.train()
@@ -246,14 +262,17 @@ def train(
         train_model.zero_grad(set_to_none=True)
 
         with amp.autocast():
-            sr = train_model(lr)
-            loss = criterion(sr, gt)
-            score = val_crite(sr, gt)  # Compute
+            output = train_model(lr)
+            # output = output[:, 0]  # only x-y location : [B, 1, w, h]
+            # gt = gt[:, 0]  # only x-y location : [B, 1, w, h]
+            gt = gt.long()  # Ensure ground truth is of type long
+            loss = criterion(output[:, 0], gt[:, 0], output[:, 1], gt[:, 1])
+            score = val_crite(output[:, 0], gt[:, 0])  # Compute
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
-        ema_convLSTM_model.update_parameters(train_model)
+        ema_model.update_parameters(train_model)
 
         losses.update(loss.item(), lr.size(0))
         scores.update(score.item(), lr.size(0))  # Update  meter
@@ -263,12 +282,12 @@ def train(
 
         if batch_index % config.train_print_frequency == 0:
             writer.add_scalar("Train/Loss", loss.item(), batch_index + epoch * batches + 1)
-            writer.add_scalar("Train/Score", score.item(), batch_index + epoch * batches + 1)  # Log
+            writer.add_scalar("Train/Score", score.item(), batch_index + epoch * batches + 1)  # Log SSIM
             progress.display(batch_index + 1)
 
     avg_loss = losses.avg
-    avg_score = scores.avg  # Calculate average score
-    return avg_loss, avg_score  # Return both average loss and score
+    avg_ssim = scores.avg  # Calculate average SSIM
+    return avg_loss, avg_ssim  # Return both average loss and SSIM
 
 
 def validate(
@@ -279,7 +298,7 @@ def validate(
         criterion: nn.MSELoss,  # Add criterion for loss computation
         val_crite: any,
         mode: str
-) -> (float, float):  # Change return type to include both loss and score
+) -> (float, float):  # Change return type to include both loss and SSIM
     batch_time = AverageMeter("Time", ":6.3f")
     losses = AverageMeter("Loss", ":6.6f")  # New meter for loss
     scores = AverageMeter("Score", ":6.6f")
@@ -295,9 +314,12 @@ def validate(
             lr = batch_data["lr"].to(device=config.device, non_blocking=True)
 
             with amp.autocast():
-                sr = validate_model(lr)
-                loss = criterion(sr, gt)  # Compute loss
-                score = val_crite(sr, gt)  # Compute
+                output = validate_model(lr)
+                output = output[:, 0]  # only x-y location : [B, 1, w, h]
+                gt = gt[:, 0]  # only x-y location : [B, 1, w, h]
+                gt = gt.long()  # Ensure ground truth is of type long
+                loss = criterion(output[:, 0], gt[:, 0], output[:, 1], gt[:, 1])
+                score = val_crite(output[:, 0], gt[:, 0])  # Compute
 
             losses.update(loss.item(), lr.size(0))  # Update loss meter
             scores.update(score.item(), lr.size(0))
@@ -307,13 +329,13 @@ def validate(
 
             if batch_index % config.valid_print_frequency == 0:
                 writer.add_scalar(f"{mode}/Loss", loss.item(), epoch + 1)  # Log loss
-                writer.add_scalar(f"{mode}/Score", score.item(), epoch + 1)
+                writer.add_scalar(f"{mode}/SSIM", score.item(), epoch + 1)
                 progress.display(batch_index + 1)
 
     progress.display_summary()
     avg_loss = losses.avg
-    avg_score = scores.avg  # Calculate average score
-    return avg_loss, avg_score  # Return both average loss and score
+    avg_score = scores.avg  # Calculate average SSIM
+    return avg_loss, avg_score  # Return both average loss and SSIM
 
 
 # Function to release GPU resources
@@ -334,7 +356,6 @@ if __name__ == "__main__":
 
     # Your main program logic starts here
     print("Program is running... Press Ctrl+C to terminate.")
-    while True:
-        main()
-        # Register the cleanup function to be called at program exit
-        atexit.register(cleanup)
+    main()
+    # Register the cleanup function to be called at program exit
+    atexit.register(cleanup)

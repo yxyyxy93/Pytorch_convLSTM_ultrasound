@@ -190,7 +190,7 @@ class ConvLSTM(nn.Module):
 
         resized_and_selected_output = self.mod_layer(layer_output_list)
 
-        return resized_and_selected_output[-1], last_state_list
+        return resized_and_selected_output[-1]
 
     def _init_hidden(self, batch_size, image_size):
         init_states = []
@@ -236,6 +236,134 @@ class ResizeAndSelectLastK(nn.Module):
 
         return processed_outputs
 
+
+# ------------------ 3D U-Net ----------------------
+
+class Conv3DBlock(nn.Module):
+    """
+    The basic block for double 3x3x3 convolutions in the analysis path
+    -- __init__()
+    :param in_channels -> number of input channels
+    :param out_channels -> desired number of output channels
+    :param bottleneck -> specifies the bottlneck block
+    -- forward()
+    :param input -> input Tensor to be convolved
+    :return -> Tensor
+    """
+
+    def __init__(self, in_channels, out_channels, bottleneck=False) -> None:
+        super(Conv3DBlock, self).__init__()
+        self.conv1 = nn.Conv3d(in_channels=in_channels, out_channels=out_channels // 2, kernel_size=(3, 3, 3),
+                               padding=1)
+        self.bn1 = nn.BatchNorm3d(num_features=out_channels // 2)
+        self.conv2 = nn.Conv3d(in_channels=out_channels // 2, out_channels=out_channels, kernel_size=(3, 3, 3),
+                               padding=1)
+        self.bn2 = nn.BatchNorm3d(num_features=out_channels)
+        self.relu = nn.ReLU()
+        self.bottleneck = bottleneck
+        if not bottleneck:
+            self.pooling = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=2)
+
+    def forward(self, input):
+        res = self.relu(self.bn1(self.conv1(input)))
+        res = self.relu(self.bn2(self.conv2(res)))
+        None
+        if not self.bottleneck:
+            out = self.pooling(res)
+        else:
+            out = res
+        return out, res
+
+
+class UpConv3DBlock(nn.Module):
+    """
+    The basic block for upsampling followed by double 3x3x3 convolutions in the synthesis path
+    -- __init__()
+    :param in_channels -> number of input channels
+    :param out_channels -> number of residual connections' channels to be concatenated
+    :param last_layer -> specifies the last output layer
+    :param num_classes -> specifies the number of output channels for dispirate classes
+    -- forward()
+    :param input -> input Tensor
+    :param residual -> residual connection to be concatenated with input
+    :return -> Tensor
+    """
+
+    def __init__(self, in_channels, res_channels=0, last_layer=False, num_classes=None) -> None:
+        super(UpConv3DBlock, self).__init__()
+        assert (last_layer == False and num_classes == None) or (
+                last_layer == True and num_classes != None), 'Invalid arguments'
+        self.upconv1 = nn.ConvTranspose3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(2, 2, 2),
+                                          stride=2)
+        self.relu = nn.ReLU()
+        self.bn = nn.BatchNorm3d(num_features=in_channels // 2)
+        self.conv1 = nn.Conv3d(in_channels=in_channels + res_channels, out_channels=in_channels // 2,
+                               kernel_size=(3, 3, 3), padding=(1, 1, 1))
+        self.conv2 = nn.Conv3d(in_channels=in_channels // 2, out_channels=in_channels // 2, kernel_size=(3, 3, 3),
+                               padding=(1, 1, 1))
+        self.last_layer = last_layer
+        if last_layer:
+            self.conv3 = nn.Conv3d(in_channels=in_channels // 2, out_channels=num_classes, kernel_size=(1, 1, 1))
+
+    def forward(self, input, residual=None):
+        out = self.upconv1(input)
+        if residual != None: out = torch.cat((out, residual), 1)
+        out = self.relu(self.bn(self.conv1(out)))
+        out = self.relu(self.bn(self.conv2(out)))
+        if self.last_layer: out = self.conv3(out)
+        return out
+
+
+class UNet3D(nn.Module):
+    """
+    The 3D UNet model
+    -- __init__()
+    :param in_channels -> number of input channels
+    :param num_classes -> specifies the number of output channels or masks for different classes
+    :param level_channels -> the number of channels at each level (count top-down)
+    :param bottleneck_channel -> the number of bottleneck channels
+    :param device -> the device on which to run the model
+    -- forward()
+    :param input -> input Tensor
+    :return -> Tensor
+    """
+
+    def __init__(self, in_channels, num_classes, level_channels=[64, 128, 256], bottleneck_channel=512) -> None:
+        super(UNet3D, self).__init__()
+        level_1_chnls, level_2_chnls, level_3_chnls = level_channels[0], level_channels[1], level_channels[2]
+        self.a_block1 = Conv3DBlock(in_channels=in_channels, out_channels=level_1_chnls)
+        self.a_block2 = Conv3DBlock(in_channels=level_1_chnls, out_channels=level_2_chnls)
+        self.a_block3 = Conv3DBlock(in_channels=level_2_chnls, out_channels=level_3_chnls)
+        self.bottleNeck = Conv3DBlock(in_channels=level_3_chnls, out_channels=bottleneck_channel, bottleneck=True)
+        self.s_block3 = UpConv3DBlock(in_channels=bottleneck_channel, res_channels=level_3_chnls)
+        self.s_block2 = UpConv3DBlock(in_channels=level_3_chnls, res_channels=level_2_chnls)
+        self.s_block1 = UpConv3DBlock(in_channels=level_2_chnls, res_channels=level_1_chnls, num_classes=num_classes,
+                                      last_layer=True)
+
+    def forward(self, input):
+        # change dim
+        input = input.permute([0, 2, 1, 3, 4])  # -> [b, c, t, w, h]
+        # Analysis path forward feed
+        out, residual_level1 = self.a_block1(input)
+        out, residual_level2 = self.a_block2(out)
+        out, residual_level3 = self.a_block3(out)
+        out, _ = self.bottleNeck(out)
+
+        # Synthesis path forward feed
+        out = self.s_block3(out, residual_level3)
+        out = self.s_block2(out, residual_level2)
+        out = self.s_block1(out, residual_level1)
+
+        # # average to reduce the 3rd dimension to 1
+        # out = out.mean(dim=2, keepdim=True)  # Averages across the depth dimension
+        # out = out.squeeze(dim=2)
+
+        out = torch.sigmoid(out)
+
+        return out
+
+
+# ------------------
 
 def test_model_output(model, input_tensor, ground_truth):
     """
@@ -285,12 +413,19 @@ def test_model_output(model, input_tensor, ground_truth):
     return output
 
 
-# Example usage
 if __name__ == "__main__":
-    import test  # for debug
-    import visualization
-    import torch.onnx
-    from utils import criteria
+    # Define the input dimensions
+    batch_size = 4
+    time_seq = 256
+    num_channels = 1
+    height = 16
+    width = 16
+
+    # Number of classes for output (modify as needed)
+    n_classes = 10
+
+    # Create a dummy input tensor with the specified dimensions
+    x = torch.randn(batch_size, time_seq, num_channels, height, width)
 
     input_dim = 1
     hidden_dim = 64
@@ -298,58 +433,24 @@ if __name__ == "__main__":
     output_tl = 1
     kernel_size = (3, 3)
     num_layers = 2
-    height = 21  # Example height, adjust as needed
-    width = 21  # Example width, adjust as needed
+    height = 16  # Example height, adjust as needed
+    width = 16  # Example width, adjust as needed
     bias = True
 
-    # Initialize model using the configuration
-    convLSTM_model = ConvLSTM(input_dim=input_dim,
-                              hidden_dim=hidden_dim,
-                              new_channel=output_dim,
-                              new_seq_len=output_tl,
-                              kernel_size=kernel_size,
-                              num_layers=num_layers,
-                              batch_first=True)
+    # Initialize the UNet model
+    model = ConvLSTM(input_dim=input_dim,
+                     hidden_dim=hidden_dim,
+                     new_channel=output_dim,
+                     new_seq_len=output_tl,
+                     kernel_size=kernel_size,
+                     num_layers=num_layers,
+                     batch_first=True)
 
-    # Prepare test dataset
-    test_loader = test.load_test_dataset()
-    for data in test_loader:
-        input_data = data['lr']
-        gt = data['gt']
+    print("input shape:", x.shape)
+    # Pass the input tensor through the model
+    output = model(x)
 
-        loc_gt = gt[:, 0]
-        output = test_model_output(convLSTM_model, input_data, gt)
-
-        # check loss functions
-        # get the loss function class based on the string name
-        # criterion = criteria.MulticlassDiceLoss()
-        # loss = criterion(output, loc_gt)
-        criterion = criteria.myCrossEntropyLoss()
-        loss = criterion(output, loc_gt)
-        # val_crite = criteria.PixelAccuracy()
-        # score = val_crite(output, loc_gt)  # Compute
-
-        # criterion = criteria.DiceLoss()
-        # loss = criterion(output, loc_gt)
-
-        loc_gt = loc_gt.squeeze()
-        output = output.squeeze()
-        output_arg = torch.sigmoid(output)
-        input_data = input_data.squeeze()
-        visualization.visualize_sample(input_data, loc_gt, output_arg, title="Ground Truth vs Output",
-                                       slice_idx_input=(200, 10, 10), slice_idx=(84, 10, 10))
-
-        # Instantiate the submodel using the configuration
-        submodel = ConvLSTMCell(input_dim=input_dim,
-                                hidden_dim=hidden_dim,
-                                kernel_size=kernel_size,
-                                bias=bias)
-
-        # Create a dummy input and initial state using the configuration
-        dummy_input = torch.randn(1, input_dim, height, width)
-        dummy_state = (torch.zeros(1, hidden_dim, height, width),
-                       torch.zeros(1, hidden_dim, height, width))
-        # Export to ONNX
-        torch.onnx.export(submodel, (dummy_input, dummy_state), "submodel_convlstm_cell.onnx")
-
-        break
+    # Print the output shape
+    print("Output shape:", output.shape)
+    print("Output max value:", output.max().item())
+    print("Output min value:", output.min().item())

@@ -9,7 +9,8 @@ __all__ = [
     "DiceLoss",
     "MulticlassDiceLoss",
     "myCrossEntropyLoss",
-    "PixelAccuracy"
+    "PixelAccuracy",
+    "CombinedLoss"
 ]
 
 
@@ -109,42 +110,49 @@ class SSIM3D(nn.Module):
 
 # -------------- loss functions
 class DiceLoss(nn.Module):
-    def __init__(self, smooth=1):
+    def __init__(self):
         super(DiceLoss, self).__init__()
-        self.smooth = smooth
 
-    def forward(self, inputs, targets):
-        #  inputs  probability space [0, 1]
-        # Squeeze the input to remove the channel dimension since C=1
-        inputs = inputs.squeeze(dim=1)  # Now inputs shape is [B, T, H, W]
+    def forward(self, inputs, targets, smooth=1):
+        # Apply sigmoid to the inputs
+        inputs = torch.sigmoid(inputs)
 
-        # Ensure targets is a LongTensor (int64)
-        targets = targets.long()  # Convert y_true to LongTensor if not already
+        # Flatten label and prediction tensors
+        inputs = inputs.reshape(-1)
+        targets = targets.reshape(-1)
 
-        B, T_target, H, W = targets.shape
-        _, T, _, _ = inputs.shape
-        # Calculate initial downsampling factor
-        factor = T // T_target
-        # Adjust factor if T is not divisible by T_target
-        if T % T_target != 0:
-            # Find a factor that's close but ensures we don't index out of bounds
-            while T // factor < T_target:
-                factor -= 1
-        # Downsample by taking every 'factor'-th element
-        inputs = inputs[:, :T_target * factor:factor, :, :]
-
-        # Ensure the shape is correct
-        assert inputs.shape[1] == T_target
-
-        # Flatten the tensors
-        inputs_flat = inputs.reshape(-1)
-        targets_flat = targets.reshape(-1)
-
-        # Calculate Dice coefficient
-        intersection = (inputs_flat * targets_flat).sum()
-        dice = (2. * intersection + self.smooth) / (inputs_flat.sum() + targets_flat.sum() + self.smooth)
+        intersection = (inputs * targets).sum()
+        dice = (2. * intersection + smooth) / (inputs.sum() + targets.sum() + smooth)
 
         return 1 - dice
+
+
+class CombinedLoss(nn.Module):
+    def __init__(self, weight_dice=0.5, weight_mse=0.5, threshold=0.5):
+        super(CombinedLoss, self).__init__()
+        self.dice_loss = DiceLoss()
+        self.mse_loss = nn.MSELoss()
+        self.weight_dice = weight_dice
+        self.weight_mse = weight_mse
+        self.threshold = threshold
+
+    def forward(self, input1, target1, input2, target2):
+        """
+        Calculate the combined Dice and MSE loss.
+        :param input1: The input tensor for DiceLoss
+        :param target1: The target tensor for DiceLoss
+        :param input2: The input tensor for MSELoss
+        :param target2: The target tensor for MSELoss
+        :return: Weighted combined loss
+        """
+        loss_dice = self.dice_loss(input1, target1)
+        # Convert input1 to a binary mask
+        mask = (input1 > self.threshold).float()
+        # Use mask to mask input2
+        masked_input2 = input2 * mask
+        target2 = target2.float()
+        loss_mse = self.mse_loss(masked_input2, target2)
+        return self.weight_dice * loss_dice + self.weight_mse * loss_mse
 
 
 class IoU(nn.Module):
@@ -176,28 +184,15 @@ class MulticlassDiceLoss(nn.Module):
 
     def forward(self, y_pred, y_true):
         # y_pred shape: [B, T, C, H, W]
-        # y_true shape: [B, H, W]
-
-        # Ensure y_true is a LongTensor (int64)
-        y_true = y_true.long()  # Convert y_true to LongTensor if not already
+        # y_true shape: [B, T, H, W]
 
         y_pred = torch.softmax(y_pred, dim=2)  # Apply softmax along the class dimension
-
-        # Assuming y_pred is of shape [B, T, C, H, W]
         B, T, C, H, W = y_pred.shape
 
         # One-hot encode y_true
-        # The one-hot encoding should match y_pred's shape, so we expand y_true
-        y_true_expanded = y_true.unsqueeze(1).unsqueeze(2)  # Expand to [B, 1, 1, H, W]
-        y_true_expanded = y_true_expanded.expand(-1, T, C, -1, -1)  # Expand to [B, T, C, H, W]
+        y_true_one_hot = torch.zeros(B, T, C, H, W, device=y_pred.device)
+        y_true_one_hot.scatter_(2, y_true.unsqueeze(2), 1)  # Now y_true_one_hot is [B, T, C, H, W]
 
-        # Ensure y_true is of the correct type for scatter_
-        y_true_expanded = y_true_expanded.long()
-
-        y_true_one_hot = torch.zeros_like(y_pred, device=y_pred.device)  # Match y_pred's shape and device
-        y_true_one_hot.scatter_(2, y_true_expanded, 1)
-
-        # Calculate Dice Loss
         dice_loss = 0.0
         for c in range(C):
             y_true_c = y_true_one_hot[:, :, c, ...]
@@ -219,26 +214,17 @@ class MulticlassDiceLoss(nn.Module):
 
 
 class myCrossEntropyLoss(nn.Module):
-    """
-__constants__ = ['ignore_index', 'reduction', 'label_smoothing']
-ignore_index: int
-label_smoothing: float
-"""
-    def __init__(self, ignore_index: int = -100,
-                 label_smoothing: float = 0.0) -> None:
-        super().__init__()
-        self.ignore_index = ignore_index
-        self.label_smoothing = label_smoothing
+    def __init__(self, weight=None, ignore_index=-100, reduction='mean'):
+        super(myCrossEntropyLoss, self).__init__()
+        self.cross_entropy = nn.CrossEntropyLoss(weight=weight,
+                                                 ignore_index=ignore_index,
+                                                 reduction=reduction)
 
-    def forward(self, input, target):
-        input = input.squeeze(dim=1)
-        B, C, H, W = input.shape
-        input_permuted = input.permute(0, 3, 2, 1)
-        input_flat = input_permuted.reshape(B * H * W, C)
-        # For the target, ensure it's a long tensor first as required by CrossEntropyLoss
-        target_flat = target.reshape(B * H * W).long()
-        return F.cross_entropy(input_flat, target_flat, ignore_index=self.ignore_index,
-                               label_smoothing=self.label_smoothing)
+    def forward(self, input_tensor, target):
+        # Permute the input tensor to shape [B, C, T, H, W]
+        input_permuted = input_tensor.permute(0, 2, 1, 3, 4)
+
+        return self.cross_entropy(input_permuted, target)
 
 
 class PixelAccuracy(nn.Module):
@@ -246,28 +232,53 @@ class PixelAccuracy(nn.Module):
         super(PixelAccuracy, self).__init__()
 
     def forward(self, y_pred, y_true):
-            """
+        """
             Calculate pixel accuracy for multi-class segmentation.
             :param y_pred: The prediction tensor of shape [B, H, W]
             :param y_true: The ground truth tensor of shape [B, H, W]
             :return: Pixel accuracy
             """
-            # Get the predicted class for each pixel
-            threshold = 0.5
-            predicted = (y_pred > threshold).long()
+        # Get the predicted class for each pixel
+        threshold = 0.5
+        predicted = (y_pred > threshold).long()
 
-            # Calculate accuracy for each class
-            correct = (predicted == y_true).sum()
-            total = y_true.numel()
+        # Calculate accuracy for each class
+        correct = (predicted == y_true).sum()
+        total = y_true.numel()
 
-            return correct.float() / total
+        return correct.float() / total
 
 
-# # Example usage
-# if __name__ == "__main__":
-#     # Example of target with class indices
-#     loss = nn.CrossEntropyLoss()
-#     input = torch.randn(3, 5, requires_grad=True)
-#     target = torch.empty(3, dtype=torch.long).random_(5)
-#     output = loss(input, target)
-#     output.backward()
+# Example usage
+if __name__ == "__main__":
+    # Dummy data
+    batch_size = 4
+    predictions = torch.randn(batch_size, 1, 16, 16)  # Model's raw output (logits)
+    targets = torch.randint(0, 2, (batch_size, 1, 16, 16)).float()  # Binary targets
+
+    # Create an instance of the DiceLoss
+    dice_loss = DiceLoss()
+
+    # Calculate loss
+    loss = dice_loss(predictions, targets)
+    print("Dice Loss:", loss.item())
+
+    # Create an instance of PixelAccuracy
+    pixel_acc = PixelAccuracy()
+    # Calculate accuracy
+    accuracy = pixel_acc(predictions, targets)
+    print("Pixel Accuracy:", accuracy.item())
+
+    # Dummy data for the example
+    input1 = torch.randn(4, 1, 1, 16, 16)  # Example input for DiceLoss
+    target1 = torch.randint(0, 2, (4, 1, 16, 16)).float()  # Example target for DiceLoss
+
+    input2 = torch.randn(4, 1, 1, 16, 16)  # Example input for MSELoss
+    target2 = torch.randn(4, 1, 16, 16)  # Example target for MSELoss
+
+    # Initialize the combined loss with weights
+    combined_loss_function = CombinedLoss(weight_dice=0.5, weight_mse=0.5)
+
+    # Calculate combined loss
+    combined_loss = combined_loss_function(input1, target1, input2, target2)
+    print("Weighted Combined Loss:", combined_loss.item())
