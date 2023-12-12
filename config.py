@@ -48,6 +48,8 @@ val_function = "PixelAccuracy"
 
 # Experiment name, easy to save weights and log files
 exp_name = d_arch_name + "_" + loss_function
+# Constructing the path
+results_dir = os.path.join("results", f"{exp_name}_2023-12-10")
 
 # How many iterations to print the training result
 train_print_frequency = 2

@@ -25,8 +25,8 @@ def plot_metrics(metrics_plot, title):
 
     # Plot SSIM scores
     plt.subplot(1, 2, 2)
-    plt.plot(metrics_plot['avg_train_scores'], label='Avg Train SSIM')
-    plt.plot(metrics_plot['avg_val_scores'], label='Avg Validation SSIM')
+    plt.plot(metrics_plot['avg_train_scores'], label='Avg Train Score')
+    plt.plot(metrics_plot['avg_val_scores'], label='Avg Validation Score')
     plt.title(f'Average: {title} SSIM')
     plt.xlabel('Epoch')
     plt.ylabel('SSIM Score')
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     import unet_model
 
     # Set mode for testing
-    os.environ['MODE'] = 'test'
+    os.environ['MODE'] = 'train'
     import config
     from test import load_test_dataset, load_checkpoint
 
@@ -155,7 +155,7 @@ if __name__ == "__main__":
 
     # ------------- visualize the metrics
     # Directory where the results are stored
-    num_folds = 1
+    num_folds = 5
 
     # Initialize lists to store aggregated metrics
     all_train_losses = []
