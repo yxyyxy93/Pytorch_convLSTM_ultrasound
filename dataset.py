@@ -66,20 +66,15 @@ class TrainValidImageDataset(Dataset):
         # Use the mapping to get the dataset and label files
         dataset_file = list(self.dataset_label_mapping.keys())[batch_index]
         label_file = self.dataset_label_mapping[dataset_file]
-
         # Load the images
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
-        factor_ranges = ((0.8, 1.2),
-                         (0.9, 1.1),
-                         (0.9, 1.1))  # Ranges for the resize factors for each dimension
-        image_noisy, image_origin = imgproc.resize_and_restore_images(image_noisy, image_origin, factor_ranges)
-
         new_shape = [21, 21, 256]  # smaller size to match both dataset: image_noisy
         section_shape = [16, 16, 256]  # random select a section
         image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape, section_shape)
-
+        if np.isnan(image_noisy).any() or np.isinf(image_noisy).any():
+            print("Image contains NaN or Inf values.")
         image_noisy = imgproc.normalize(image_noisy)
 
         W, H, _ = section_shape  # Assuming image_origin has shape [T, W, H]
@@ -94,7 +89,6 @@ class TrainValidImageDataset(Dataset):
                     depth_matrix[w, h] = t_indices[0]  # Assign the earliest T index
 
         depth_matrix = imgproc.normalize(depth_matrix)
-
         # Convert location and depth matrices, and noisy image to PyTorch tensors
         location_tensor = torch.from_numpy(location_matrix).long()
         depth_tensor = torch.from_numpy(depth_matrix).long()
@@ -103,7 +97,10 @@ class TrainValidImageDataset(Dataset):
         # Stack location and depth tensors to create a combined tensor
         combined_tensor = torch.stack([location_tensor, depth_tensor], dim=0)  # Shape: [2, W, H]
 
-        return {"gt": combined_tensor, "lr": noisy_tensor}
+        # Set values equal to 7 to 1, and all others to 0
+        image_origin = np.where(image_origin == 7, 1, 0)
+
+        return {"gt": combined_tensor, "lr": noisy_tensor, "gt3d": torch.from_numpy(image_origin).long()}
 
     def __len__(self) -> int:
         return len(self.dataset_label_mapping)
@@ -151,6 +148,8 @@ class TestDataset(Dataset):
         new_shape = [21, 21, 256]  # smaller size to match both dataset: image_noisy
         section_shape = [16, 16, 256]  # random select a section
         image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape, section_shape)
+        if np.isnan(image_noisy).any() or np.isinf(image_noisy).any():
+            print("Image contains NaN or Inf values.")
         image_noisy = imgproc.normalize(image_noisy)
 
         W, H, _ = section_shape  # Assuming image_origin has shape [T, W, H]
