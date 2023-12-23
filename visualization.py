@@ -3,6 +3,7 @@ import json
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 import torch
+import numpy as np
 
 
 def read_metrics(file_path):
@@ -97,8 +98,16 @@ def visualize_sample(gt_visual, output_visual, slice_idx=(84, 29, 29)):
         output_visual (torch.Tensor): The output tensor from the model.
         slice_idx (tuple): Indices for axial, coronal, and sagittal slices.
     """
-    gt_np = gt_visual.detach().cpu().numpy()  # Convert to numpy array
-    output_np = output_visual.detach().cpu().numpy()  # Convert to numpy array
+    if isinstance(gt_visual, torch.Tensor):
+        # Detach and convert to numpy if it's a tensor
+        gt_np = gt_visual.detach().cpu().numpy()  # Convert to numpy array
+        output_np = output_visual.detach().cpu().numpy()  # Convert to numpy array
+    elif isinstance(gt_visual, np.ndarray):
+        # Directly use the numpy array if it's already a numpy array
+        gt_np = gt_visual
+        output_np = output_visual
+    else:
+        raise TypeError("gt_visual must be a PyTorch tensor or a NumPy array")
 
     # Display statistics for Ground Truth
     print("Ground Truth Statistics:")

@@ -8,12 +8,12 @@ import threading
 
 import matplotlib.pyplot as plt
 import torch
-import os
-import numpy as np
 from torch.utils.data import Dataset, DataLoader
 
-from utils import imgproc
-from utils.Read_CSV import read_csv_to_3d_array
+from utils_func import imgproc
+from utils_func.Read_CSV import read_csv_to_3d_array
+import os
+import numpy as np
 
 __all__ = [
     "TrainValidImageDataset",
@@ -70,6 +70,11 @@ class TrainValidImageDataset(Dataset):
         # Load the images
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
+
+        factor_ranges = ((0.8, 1.2),
+                         (0.9, 1.1),
+                         (0.9, 1.1))  # Ranges for the resize factors for each dimension
+        image_noisy, image_origin = imgproc.resize_and_restore_images(image_noisy, image_origin, factor_ranges)
 
         new_shape = [21, 21, 256]  # smaller size to match both dataset: image_noisy
         section_shape = [16, 16, 256]  # random select a section
@@ -146,7 +151,6 @@ class TestDataset(Dataset):
         new_shape = [21, 21, 256]  # smaller size to match both dataset: image_noisy
         section_shape = [16, 16, 256]  # random select a section
         image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape, section_shape)
-
         image_noisy = imgproc.normalize(image_noisy)
 
         W, H, _ = section_shape  # Assuming image_origin has shape [T, W, H]
@@ -168,7 +172,10 @@ class TestDataset(Dataset):
         # Stack location and depth tensors to create a combined tensor
         combined_tensor = torch.stack([location_tensor, depth_tensor], dim=0)  # Shape: [2, W, H]
 
-        return {"gt": combined_tensor, "lr": noisy_tensor}
+        # Set values equal to 7 to 1, and all others to 0
+        image_origin = np.where(image_origin == 7, 1, 0)
+
+        return {"gt": combined_tensor, "lr": noisy_tensor, "gt3d": torch.from_numpy(image_origin).long()}
 
     def __len__(self) -> int:
         return len(self.dataset_label_mapping)

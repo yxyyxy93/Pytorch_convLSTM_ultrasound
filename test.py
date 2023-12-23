@@ -7,7 +7,8 @@ os.environ['MODE'] = 'test'
 import config
 import dataset
 import json
-from utils.criteria import SSIM3D  # Assuming SSIM3D is defined in utils.criteria
+from utils_func.criteria import SSIM3D  # Assuming SSIM3D is defined in utils_func.criteria
+import unet_model
 
 
 def load_checkpoint(model_load, checkpoint_path):
@@ -42,10 +43,10 @@ def evaluate_model(test_loader, model_eval, device):
 
 def main():
     # Initialize model
-    convLSTM_model = model.__dict__[config.d_arch_name](input_dim=config.input_dim,
-                                                        hidden_dim=config.hidden_dim,
-                                                        kernel_size=config.kernel_size,
-                                                        output_size=config.output_size).to(config.device)
+    convLSTM_model = unet_model.__dict__[config.d_arch_name](input_dim=config.input_dim,
+                                                             hidden_dim=config.hidden_dim,
+                                                             kernel_size=config.kernel_size,
+                                                             output_size=config.output_size).to(config.device)
 
     # Load model checkpoint
     convLSTM_model = load_checkpoint(convLSTM_model, config.model_path)

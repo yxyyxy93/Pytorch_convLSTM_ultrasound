@@ -21,8 +21,8 @@ import signal
 import sys
 
 from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset, show_dataset_info
-from utils.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
-from utils import criteria
+from utils_func.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
+from utils_func import criteria
 
 # Set mode for training
 os.environ['MODE'] = 'train'
