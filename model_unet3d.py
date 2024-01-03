@@ -8,6 +8,7 @@ from torch import nn
 import torch
 import torch.nn.functional as F
 
+
 class Conv3DBlock(nn.Module):
     """
     The basic block for double 3x3x3 convolutions in the analysis path
