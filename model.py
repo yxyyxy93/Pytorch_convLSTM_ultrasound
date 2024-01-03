@@ -120,7 +120,8 @@ class ConvLSTM(nn.Module):
         self.mod_layer = ResizeAndSelectLastK(k=new_seq_len)
         self.final_conv = nn.Conv2d(in_channels=self.hidden_dim[0],
                                     out_channels=new_channel,
-                                    kernel_size=(1, 1),
+                                    kernel_size=(3, 3),
+                                    padding=(1, 1),
                                     bias=self.bias)
 
     def forward(self, input_tensor, hidden_state=None):
@@ -153,10 +154,10 @@ class ConvLSTM(nn.Module):
 
         layer_output_list = []
         last_state_list = []
+        last_seq_output = []
 
         seq_len = input_tensor.size(1)
         cur_layer_input = input_tensor
-
         for layer_idx in range(self.num_layers):
 
             h, c = hidden_state[layer_idx]
@@ -165,32 +166,26 @@ class ConvLSTM(nn.Module):
                 h, c = self.cell_list[layer_idx](input_tensor=cur_layer_input[:, t, :, :, :],
                                                  cur_state=[h, c])
                 output_inner.append(h)
+                if t == seq_len - 1:
+                    last_seq_output.append(h)
 
             layer_output = torch.stack(output_inner, dim=1)
             cur_layer_input = layer_output
+            # last_seq_output.append(torch.mean(layer_output, dim=1))
 
-            # Apply final_conv only after the last layer
-            if layer_idx == self.num_layers - 1:
-                # Before applying self.final_conv
-                batch_size, seq_len, channels, height, width = layer_output.size()
-                layer_output = layer_output.view(batch_size * seq_len, channels, height, width)
-                # Apply the convolution
-                layer_output = self.final_conv(layer_output)
-                layer_output = torch.sigmoid(layer_output)
-                # Reshape back if needed
-                layer_output = layer_output.view(batch_size, seq_len, -1, height,
-                                                 width)  # adjust -1 according to your new number of channels
+            ## Average the outputs over the time steps
+            # layer_avg_output = torch.mean(layer_output_list, dim=1)
+            # last_seq_output.append(layer_avg_output)
 
-            layer_output_list.append(layer_output)
-            last_state_list.append([h, c])
+        # fused_output = torch.cat(last_seq_output, dim=1)
+        fused_output = h
+        fused_output = self.final_conv(fused_output)
+        fused_output = torch.sigmoid(fused_output)
 
-        if not self.return_all_layers:
-            layer_output_list = layer_output_list[-1:]
-            last_state_list = last_state_list[-1:]
-
-        resized_and_selected_output = self.mod_layer(layer_output_list)
-
-        return resized_and_selected_output[-1]
+        # resized_and_selected_output = self.mod_layer(layer_output_list)
+        # fuse all layer outputs.
+        # return resized_and_selected_output[-1]
+        return fused_output
 
     def _init_hidden(self, batch_size, image_size):
         init_states = []
@@ -220,7 +215,7 @@ class ResizeAndSelectLastK(nn.Module):
         # Process each tensor in the list
         processed_outputs = []
         for output in layer_output_list:
-            pooled_output = output[:, -self.k:,:,:,:]
+            pooled_output = output[:, -self.k:, :, :, :]
             # B, T, C, H, W = output.shape
             # pooled_output = torch.zeros(B, self.k, C, H, W, device=output.device)
             #

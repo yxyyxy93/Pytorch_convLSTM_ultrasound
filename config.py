@@ -43,13 +43,13 @@ num_layers = 2
 d_arch_name = "ConvLSTM"
 
 # ---------- choose from loss functions
-loss_function = "CombinedLoss"  # Options: DiceLoss, myCrossEntropyLoss, MulticlassDiceLoss, etc.
+loss_function = "DiceLoss"  # Options: DiceLoss, myCrossEntropyLoss, MulticlassDiceLoss, etc.
 val_function = "PixelAccuracy"
 
 # Experiment name, easy to save weights and log files
 exp_name = d_arch_name + "_" + loss_function
 # Constructing the path
-results_dir = os.path.join("results", f"{exp_name}_2023-12-11")
+results_dir = os.path.join("results", f"{exp_name}_2023-12-18")
 
 # How many iterations to print the training result
 train_print_frequency = 2

@@ -21,8 +21,8 @@ import signal
 import sys
 
 from dataset import CUDAPrefetcher, CPUPrefetcher, TrainValidImageDataset, show_dataset_info
-from utils.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
-from utils import criteria
+from utils_func.utils import load_state_dict, make_directory, save_checkpoint, AverageMeter, ProgressMeter
+from utils_func import criteria
 
 # Set mode for training
 os.environ['MODE'] = 'train'
@@ -263,11 +263,8 @@ def train(
 
         with amp.autocast():
             output = train_model(lr)
-            # output = output[:, 0]  # only x-y location : [B, 1, w, h]
-            # gt = gt[:, 0]  # only x-y location : [B, 1, w, h]
-            gt = gt.long()  # Ensure ground truth is of type long
-            loss = criterion(output[:, :, 0], gt[:, 0], output[:, :, 1], gt[:, 1])
-            score = val_crite(output[:, :, 0], gt[:, 0])  # Compute
+            loss = criterion(output, gt)
+            score = val_crite(output, gt)  # Compute
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -315,9 +312,8 @@ def validate(
 
             with amp.autocast():
                 output = validate_model(lr)
-                gt = gt.long()  # Ensure ground truth is of type long
-                loss = criterion(output[:, :, 0], gt[:, 0], output[:, :, 1], gt[:, 1])
-                score = val_crite(output[:, :, 0], gt[:, 0])  # Compute
+                loss = criterion(output, gt)
+                score = val_crite(output, gt)  # Compute
 
             losses.update(loss.item(), lr.size(0))  # Update loss meter
             scores.update(score.item(), lr.size(0))

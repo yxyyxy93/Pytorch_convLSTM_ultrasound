@@ -33,7 +33,7 @@ def process_file(dirpath, file, pattern, destination):
 
 if __name__ == "__main__":
     # Define the source directory where to begin the search
-    source_directory = r'D:\pogo_work\results_mat\test_woven_[#45n45#090]_4_defect'
+    source_directory = r'D:\pogo_work\results_mat\test_woven_[#090]8_(0-1defect)'
 
     # Define the file types you are looking for
     filetypes = ['origin.csv', 'amplitude.csv', 'phase.csv']

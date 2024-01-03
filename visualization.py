@@ -155,8 +155,8 @@ if __name__ == "__main__":
         output = convLSTM_model(inputs)
 
     # Visualize the sample
-    visualize_sample(output[:, :, 0].squeeze(), gt[:, 0].squeeze(), slice_idx=(128, 8, 8))
-    visualize_sample(output[:, :, 1].squeeze(), gt[:, 1].squeeze(), slice_idx=(128, 8, 8))
+    visualize_sample(output[:, 0].squeeze(), data['loc_xy'].squeeze(), slice_idx=(128, 8, 8))
+    visualize_sample(output[:, 1].squeeze(), gt[:, 1].squeeze(), slice_idx=(128, 8, 8))
 
     # ------------- visualize the metrics
     # Directory where the results are stored

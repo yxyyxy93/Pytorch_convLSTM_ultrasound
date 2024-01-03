@@ -12,8 +12,8 @@ import os
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 
-from utils import imgproc
-from utils.Read_CSV import read_csv_to_3d_array
+from utils_func import imgproc
+from utils_func.Read_CSV import read_csv_to_3d_array
 
 __all__ = [
     "TrainValidImageDataset",
@@ -71,35 +71,37 @@ class TrainValidImageDataset(Dataset):
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
+        # print_statistics(image_origin, "Initial")
+        # Assign 1 where the value is 7, and 0 otherwise in the 'image_origin' array
+        image_origin = np.where(image_origin == 7, 1, 0)
+        # print_statistics(image_origin, "After Condition Assignment")
+        factor_ranges = ((0.8, 1.2),
+                         (0.9, 1.1),
+                         (0.9, 1.1))  # Ranges for the resize factors for each dimension
+        image_origin, image_noisy = imgproc.resize_and_restore_images(image_origin,
+                                                                      image_noisy,
+                                                                      factor_ranges=factor_ranges)
+        # print_statistics(image_origin, "After Resize and Restore")
         new_shape = [21, 21, 256]  # smaller size to match both dataset: image_noisy
         section_shape = [16, 16, 256]  # random select a section
-        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape, section_shape)
+        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin,
+                                                                    image_noisy,
+                                                                    new_shape, section_shape)
+
+        # print_statistics(image_origin, "After Rearranging 3D Array")
+        # First Tensor: Location of Class 1 in terms of W and H
+        location_matrix = np.any(image_origin == 1, axis=0)  # Shape: [W, H] for debug
 
         image_noisy = imgproc.normalize(image_noisy)
-        image_noisy = image_noisy[:, np.newaxis, :, :]  # add a feature channel
-
-        W, H, _ = section_shape  # Assuming image_origin has shape [T, W, H]
-        # First Tensor: Location of Class 1 in terms of W and H
-        location_matrix = np.any(image_origin == 7, axis=0)  # Shape: [W, H]
-        # Second Tensor: Depth of Class 1 in terms of T axis
-        depth_matrix = np.zeros((W, H))  # Initialize with zeros
-        for w in range(W):
-            for h in range(H):
-                t_indices = np.nonzero(image_origin[:, w, h] == 7)[0]
-                if len(t_indices) > 0:
-                    depth_matrix[w, h] = t_indices[0]  # Assign the earliest T index
-
-        depth_matrix = imgproc.normalize(depth_matrix)
+        image_noisy = image_noisy[np.newaxis, :, :, :]  # add a feature channel
+        image_origin = image_origin[np.newaxis, :, :, :]  # add a feature channel
 
         # Convert location and depth matrices, and noisy image to PyTorch tensors
         location_tensor = torch.from_numpy(location_matrix).long()
-        depth_tensor = torch.from_numpy(depth_matrix).long()
+        origin_tensor = torch.from_numpy(image_origin).float()
         noisy_tensor = torch.from_numpy(image_noisy).float()
 
-        # Stack location and depth tensors to create a combined tensor
-        combined_tensor = torch.stack([location_tensor, depth_tensor], dim=0)  # Shape: [2, W, H]
-
-        return {"gt": combined_tensor, "lr": noisy_tensor}
+        return {"gt": origin_tensor, "lr": noisy_tensor, "loc_xy": location_tensor}
 
     def __len__(self) -> int:
         return len(self.dataset_label_mapping)
@@ -144,33 +146,37 @@ class TestDataset(Dataset):
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
+        # print_statistics(image_origin, "Initial")
+        # Assign 1 where the value is 7, and 0 otherwise in the 'image_origin' array
+        image_origin = np.where(image_origin == 7, 1, 0)
+        # print_statistics(image_origin, "After Condition Assignment")
+        factor_ranges = ((0.8, 1.2),
+                         (0.9, 1.1),
+                         (0.9, 1.1))  # Ranges for the resize factors for each dimension
+        image_origin, image_noisy = imgproc.resize_and_restore_images(image_origin,
+                                                                      image_noisy,
+                                                                      factor_ranges=factor_ranges)
+
         new_shape = [21, 21, 256]  # smaller size to match both dataset: image_noisy
         section_shape = [16, 16, 256]  # random select a section
-        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin, image_noisy, new_shape, section_shape)
+        image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin,
+                                                                    image_noisy,
+                                                                    new_shape, section_shape)
+
+        # print_statistics(image_origin, "After Rearranging 3D Array")
+        # First Tensor: Location of Class 1 in terms of W and H
+        location_matrix = np.any(image_origin == 1, axis=0)  # Shape: [W, H] for debug
 
         image_noisy = imgproc.normalize(image_noisy)
-        image_noisy = image_noisy[:, np.newaxis, :, :]  # add a feature channel
-
-        W, H, _ = section_shape  # Assuming image_origin has shape [T, W, H]
-        # First Tensor: Location of Class 1 in terms of W and H
-        location_matrix = np.any(image_origin == 7, axis=0)  # Shape: [W, H]
-        # Second Tensor: Depth of Class 1 in terms of T axis
-        depth_matrix = np.zeros((W, H))  # Initialize with zeros
-        for w in range(W):
-            for h in range(H):
-                t_indices = np.nonzero(image_origin[:, w, h] == 7)[0]
-                if len(t_indices) > 0:
-                    depth_matrix[w, h] = t_indices[0]  # Assign the earliest T index
+        image_noisy = image_noisy[np.newaxis, :, :, :]  # add a feature channel
+        image_origin = image_origin[np.newaxis, :, :, :]  # add a feature channel
 
         # Convert location and depth matrices, and noisy image to PyTorch tensors
         location_tensor = torch.from_numpy(location_matrix).long()
-        depth_tensor = torch.from_numpy(depth_matrix).long()
+        origin_tensor = torch.from_numpy(image_origin).float()
         noisy_tensor = torch.from_numpy(image_noisy).float()
 
-        # Stack location and depth tensors to create a combined tensor
-        combined_tensor = torch.stack([location_tensor, depth_tensor], dim=0)  # Shape: [2, W, H]
-
-        return {"gt": combined_tensor, "lr": noisy_tensor}
+        return {"gt": origin_tensor, "lr": noisy_tensor, "loc_xy": location_tensor}
 
     def __len__(self) -> int:
         return len(self.dataset_label_mapping)
@@ -320,15 +326,12 @@ def show_dataset_info(data_loader, show_sample_slices=False):
             xz_slice = sample[:, :, height // 2, :].squeeze()
 
             fig, _ = plt.subplots(1, 3, figsize=(15, 4))  # Adjust for an additional subplot for the slider
-
             ax1 = plt.subplot(1, 3, 1)
             ax1.imshow(xy_slice.cpu().numpy(), cmap='gray')
             ax1.set_title('XY slice')
-
             plt.subplot(1, 3, 2)
             plt.imshow(yz_slice.cpu().numpy(), cmap='gray')
             plt.title('YZ slice')
-
             plt.subplot(1, 3, 3)
             plt.imshow(xz_slice.cpu().numpy(), cmap='gray')
             plt.title('XZ slice')
@@ -336,6 +339,15 @@ def show_dataset_info(data_loader, show_sample_slices=False):
             plt.show()
 
     print("Total number of samples:", total_samples)
+
+
+def print_statistics(image, label):
+    print(f"Statistics for {label}:")
+    print(f"Min: {image.min()}, Max: {image.max()}")
+    print(f"Mean: {image.mean()}, Std: {image.std()}")
+    unique, counts = np.unique(image, return_counts=True)
+    print("Value distribution:", dict(zip(unique, counts)))
+    print()
 
 
 if __name__ == "__main__":
@@ -356,9 +368,17 @@ if __name__ == "__main__":
     for data in test_loader:
         input = data['lr'].to(config.device)
         gt = data['gt'].to(config.device)
-
+        # Check if all elements in gt are zero
+        if torch.all(gt.eq(0)):
+            print("Skipping as gt is all zeros")
+            continue
         print(input.shape)
         print(gt.shape)
+
         # Visualize the sample
-        visualize_sample(input.squeeze(), gt.squeeze()[0, :], slice_idx=(84, 8, 8))
-        visualize_sample(input.squeeze(), gt.squeeze()[1, :], slice_idx=(84, 8, 8))
+        loc_xy = data['loc_xy'].to(config.device)
+        if torch.all(loc_xy.eq(0)):
+            print("Skipping as loc_xy is all zeros")
+            continue
+
+        visualize_sample(input.squeeze(), loc_xy.squeeze(), slice_idx=(84, 8, 8))

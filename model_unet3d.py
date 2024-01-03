@@ -6,7 +6,7 @@ Author: Amir Aghdam
 
 from torch import nn
 import torch
-
+import torch.nn.functional as F
 
 class Conv3DBlock(nn.Module):
     """
@@ -76,7 +76,8 @@ class UpConv3DBlock(nn.Module):
 
     def forward(self, input, residual=None):
         out = self.upconv1(input)
-        if residual != None: out = torch.cat((out, residual), 1)
+        if residual is not None:
+            out = torch.cat((out, residual), 1)
         out = self.relu(self.bn(self.conv1(out)))
         out = self.relu(self.bn(self.conv2(out)))
         if self.last_layer: out = self.conv3(out)
@@ -109,9 +110,7 @@ class UNet3D(nn.Module):
         self.s_block1 = UpConv3DBlock(in_channels=level_2_chnls, res_channels=level_1_chnls, num_classes=num_classes,
                                       last_layer=True)
 
-    def forward(self, input):
-        # change dim
-        input = input.permute([0, 2, 1, 3, 4])  # -> [b, c, t, w, h]
+    def forward(self, input, desired_depth=168):
         # Analysis path forward feed
         out, residual_level1 = self.a_block1(input)
         out, residual_level2 = self.a_block2(out)
@@ -123,9 +122,20 @@ class UNet3D(nn.Module):
         out = self.s_block2(out, residual_level2)
         out = self.s_block1(out, residual_level1)
 
-        # # average to reduce the 3rd dimension to 1
-        # out = out.mean(dim=2, keepdim=True)  # Averages across the depth dimension
-        # out = out.squeeze(dim=2)
+        # Resize the output tensor to the desired shape in the 3rd dimension
+        current_depth = out.size(2)
+
+        # Option 1: Interpolating (resizing)
+        if desired_depth != current_depth:
+            out = F.interpolate(out, size=(desired_depth, out.size(3), out.size(4)), mode='trilinear',
+                                align_corners=False)
+
+        # Option 2: Cropping
+        # If you prefer cropping, you can crop the tensor to get the desired depth.
+        # Note: This is a simple center crop. You might need to adjust it based on your requirements.
+        # if desired_depth != current_depth:
+        #     crop_start = (current_depth - desired_depth) // 2
+        #     out = out[:, :, crop_start:crop_start + desired_depth, :, :]
 
         out = torch.sigmoid(out)
 
@@ -134,7 +144,7 @@ class UNet3D(nn.Module):
 
 if __name__ == '__main__':
     import test  # for debug
-    from utils import criteria
+    from utils_func import criteria
 
     model = UNet3D(in_channels=1, num_classes=1)
 
@@ -144,6 +154,7 @@ if __name__ == '__main__':
         input_data = data['lr']
         gt = data['gt']
         print(input_data.shape)
+        print(gt.shape)
         output = model(input_data)
 
         # Check value range in model output

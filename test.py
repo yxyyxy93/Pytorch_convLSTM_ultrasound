@@ -8,7 +8,7 @@ import config
 import dataset
 import model
 import json
-from utils.criteria import SSIM3D  # Assuming SSIM3D is defined in utils.criteria
+from utils_func.criteria import SSIM3D  # Assuming SSIM3D is defined in utils_func.criteria
 
 
 def load_checkpoint(model_load, checkpoint_path):

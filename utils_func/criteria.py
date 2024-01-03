@@ -270,10 +270,10 @@ if __name__ == "__main__":
     print("Pixel Accuracy:", accuracy.item())
 
     # Dummy data for the example
-    input1 = torch.randn(4, 1, 1, 16, 16)  # Example input for DiceLoss
+    input1 = torch.randn(4, 1, 16, 16)  # Example input for DiceLoss
     target1 = torch.randint(0, 2, (4, 1, 16, 16)).float()  # Example target for DiceLoss
 
-    input2 = torch.randn(4, 1, 1, 16, 16)  # Example input for MSELoss
+    input2 = torch.randn(4, 1, 16, 16)  # Example input for MSELoss
     target2 = torch.randn(4, 1, 16, 16)  # Example target for MSELoss
 
     # Initialize the combined loss with weights
