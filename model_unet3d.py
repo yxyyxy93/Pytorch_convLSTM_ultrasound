@@ -61,8 +61,8 @@ class UpConv3DBlock(nn.Module):
 
     def __init__(self, in_channels, res_channels=0, last_layer=False, num_classes=None) -> None:
         super(UpConv3DBlock, self).__init__()
-        assert (last_layer == False and num_classes == None) or (
-                last_layer == True and num_classes != None), 'Invalid arguments'
+        assert (last_layer == False and num_classes is None) or (
+                last_layer == True and num_classes is not None), 'Invalid arguments'
         self.upconv1 = nn.ConvTranspose3d(in_channels=in_channels, out_channels=in_channels, kernel_size=(2, 2, 2),
                                           stride=2)
         self.relu = nn.ReLU()
@@ -79,6 +79,7 @@ class UpConv3DBlock(nn.Module):
         out = self.upconv1(input)
         if residual is not None:
             out = torch.cat((out, residual), 1)
+
         out = self.relu(self.bn(self.conv1(out)))
         out = self.relu(self.bn(self.conv2(out)))
         if self.last_layer: out = self.conv3(out)
@@ -117,20 +118,16 @@ class UNet3D(nn.Module):
         out, residual_level2 = self.a_block2(out)
         out, residual_level3 = self.a_block3(out)
         out, _ = self.bottleNeck(out)
-
         # Synthesis path forward feed
         out = self.s_block3(out, residual_level3)
         out = self.s_block2(out, residual_level2)
         out = self.s_block1(out, residual_level1)
-
         # Resize the output tensor to the desired shape in the 3rd dimension
         current_depth = out.size(2)
-
         # Option 1: Interpolating (resizing)
         if desired_depth != current_depth:
             out = F.interpolate(out, size=(desired_depth, out.size(3), out.size(4)), mode='trilinear',
                                 align_corners=False)
-
         # Option 2: Cropping
         # If you prefer cropping, you can crop the tensor to get the desired depth.
         # Note: This is a simple center crop. You might need to adjust it based on your requirements.
@@ -148,7 +145,6 @@ if __name__ == '__main__':
     from utils_func import criteria
 
     model = UNet3D(in_channels=1, num_classes=1)
-
     # Prepare test dataset
     test_loader = test.load_test_dataset()
     for data in test_loader:
@@ -157,7 +153,6 @@ if __name__ == '__main__':
         print(input_data.shape)
         print(gt.shape)
         output = model(input_data)
-
         # Check value range in model output
         min_prob, max_prob = output.min(), output.max()
         print("Minimum Probability in Model Output:", min_prob.item())

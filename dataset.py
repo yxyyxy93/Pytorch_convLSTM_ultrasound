@@ -157,8 +157,8 @@ class TestDataset(Dataset):
                                                                       image_noisy,
                                                                       factor_ranges=factor_ranges)
 
-        new_shape = [21, 21, 256]  # smaller size to match both dataset: image_noisy
-        section_shape = [16, 16, 256]  # random select a section
+        new_shape = [21, 21, 320]  # smaller size to match both dataset: image_noisy
+        section_shape = [16, 16, 320]  # random select a section
         image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin,
                                                                     image_noisy,
                                                                     new_shape, section_shape)

@@ -253,8 +253,8 @@ class PixelAccuracy(nn.Module):
 if __name__ == "__main__":
     # Dummy data
     batch_size = 4
-    predictions = torch.randn(batch_size, 1, 16, 16)  # Model's raw output (logits)
-    targets = torch.randint(0, 2, (batch_size, 1, 16, 16)).float()  # Binary targets
+    predictions = torch.randn(batch_size, 1, 168, 16, 16)  # Model's raw output (logits)
+    targets = torch.randint(0, 2, (batch_size, 1, 168, 16, 16)).float()  # Binary targets
 
     # Create an instance of the DiceLoss
     dice_loss = DiceLoss()
