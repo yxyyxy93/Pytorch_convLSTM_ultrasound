@@ -40,7 +40,7 @@ output_tl = 1  # the depth length
 num_layers = 2
 
 # ------------- choose from models
-d_arch_name = "UNet3D"
+d_arch_name = "vnet"
 
 # ---------- choose from loss functions
 loss_function = "DiceLoss"  # Options: DiceLoss, myCrossEntropyLoss, MulticlassDiceLoss, etc.

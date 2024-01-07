@@ -27,7 +27,7 @@ from utils_func import criteria
 # Set mode for training
 os.environ['MODE'] = 'train'
 import config
-import model_unet3d
+import vnet
 
 
 def main():
@@ -197,8 +197,7 @@ def load_dataset(num_folds=5) -> list:
 
 
 def build_model() -> [nn.Module, nn.Module]:
-    convLSTMmodel = model_unet3d.__dict__[config.d_arch_name](in_channels=1,
-                                                              num_classes=1).to(config.device)
+    convLSTMmodel = vnet.__dict__[config.d_arch_name]
 
     convLSTMmodel = convLSTMmodel.to(device=config.device)
 

@@ -75,18 +75,22 @@ class TrainValidImageDataset(Dataset):
         # Assign 1 where the value is 7, and 0 otherwise in the 'image_origin' array
         image_origin = np.where(image_origin == 7, 1, 0)
         # print_statistics(image_origin, "After Condition Assignment")
-        factor_ranges = ((0.8, 1.2),
-                         (0.9, 1.1),
-                         (0.9, 1.1))  # Ranges for the resize factors for each dimension
-        image_origin, image_noisy = imgproc.resize_and_restore_images(image_origin,
-                                                                      image_noisy,
-                                                                      factor_ranges=factor_ranges)
+        # factor_ranges = ((0.8, 1.2),
+        #                  (0.9, 1.1),
+        #                  (0.9, 1.1))  # Ranges for the resize factors for each dimension
+        # image_origin, image_noisy = imgproc.resize_and_restore_images(image_origin,
+        #                                                               image_noisy,
+        #                                                               factor_ranges=factor_ranges)
+
         # print_statistics(image_origin, "After Resize and Restore")
         new_shape = [21, 21, 256]  # smaller size to match both dataset: image_noisy
         section_shape = [16, 16, 256]  # random select a section
         image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin,
                                                                     image_noisy,
                                                                     new_shape, section_shape)
+
+        dilation_factors = (20, 1, 1)  # Example dilation factors
+        image_origin = imgproc.dilate_3d_array(image_origin, dilation_factors)
 
         # print_statistics(image_origin, "After Rearranging 3D Array")
         # First Tensor: Location of Class 1 in terms of W and H
@@ -149,19 +153,22 @@ class TestDataset(Dataset):
         # print_statistics(image_origin, "Initial")
         # Assign 1 where the value is 7, and 0 otherwise in the 'image_origin' array
         image_origin = np.where(image_origin == 7, 1, 0)
-        # print_statistics(image_origin, "After Condition Assignment")
-        factor_ranges = ((0.8, 1.2),
-                         (0.9, 1.1),
-                         (0.9, 1.1))  # Ranges for the resize factors for each dimension
-        image_origin, image_noisy = imgproc.resize_and_restore_images(image_origin,
-                                                                      image_noisy,
-                                                                      factor_ranges=factor_ranges)
+        # # print_statistics(image_origin, "After Condition Assignment")
+        # factor_ranges = ((0.8, 1.2),
+        #                  (0.9, 1.1),
+        #                  (0.9, 1.1))  # Ranges for the resize factors for each dimension
+        # image_origin, image_noisy = imgproc.resize_and_restore_images(image_origin,
+        #                                                               image_noisy,
+        #                                                               factor_ranges=factor_ranges)
 
         new_shape = [21, 21, 320]  # smaller size to match both dataset: image_noisy
         section_shape = [16, 16, 320]  # random select a section
         image_origin, image_noisy = imgproc.resample_3d_array_numpy(image_origin,
                                                                     image_noisy,
                                                                     new_shape, section_shape)
+
+        dilation_factors = (20, 1, 1)  # Example dilation factors
+        image_origin = imgproc.dilate_3d_array(image_origin, dilation_factors)
 
         # print_statistics(image_origin, "After Rearranging 3D Array")
         # First Tensor: Location of Class 1 in terms of W and H
@@ -350,6 +357,43 @@ def print_statistics(image, label):
     print()
 
 
+def find_block_center(array, value=1):
+    """
+    Find the center of a block with a specified value.
+    """
+    coords = np.argwhere(array == value)
+    if coords.size == 0:
+        raise ValueError(f"No element with value {value} found in the array.")
+    center = coords.mean(axis=0).astype(int)
+    return center
+
+
+def plot_dual_orthoslices(data1, data2, value=1):
+    """
+    Plot orthoslices for two 3D arrays, centered on a block of a given value in the first array.
+    """
+    if data1.ndim != 3 or data2.ndim != 3:
+        raise ValueError("Both data1 and data2 must be 3D arrays.")
+
+    # Find the center of the block in the first array
+    center = find_block_center(data1, value)
+    fig, ax = plt.subplots(2, 3, figsize=(15, 10))  # 2 rows for each 3D array
+    # Plotting for the first array
+    for i in range(3):
+        ax[0, i].imshow(data1.take(indices=center[i], axis=i), cmap='gray', aspect='auto')
+        ax[0, i].set_title(f'Array 1 - Slice {center[i]}')
+        ax[0, i].axis('off')
+
+    # Plotting for the second array
+    for i in range(3):
+        ax[1, i].imshow(data2.take(indices=center[i], axis=i), cmap='gray', aspect='auto')
+        ax[1, i].set_title(f'Array 2 - Slice {center[i]}')
+        ax[1, i].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+
 if __name__ == "__main__":
     import numpy as np
     import os
@@ -357,7 +401,7 @@ if __name__ == "__main__":
     # Set mode for testing
     os.environ['MODE'] = 'train'
     import config
-    from visualization import visualize_sample
+    # from visualization import visualize_sample
 
     # ------------- visualize some samples
     # Prepare test dataset
@@ -381,4 +425,5 @@ if __name__ == "__main__":
             print("Skipping as loc_xy is all zeros")
             continue
 
-        visualize_sample(input.squeeze(), loc_xy.squeeze(), slice_idx=(84, 8, 8))
+        plot_dual_orthoslices(gt.squeeze().numpy(), input.squeeze().numpy(), value=1)
+

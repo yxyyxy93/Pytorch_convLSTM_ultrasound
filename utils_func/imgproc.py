@@ -6,6 +6,7 @@
 import numpy as np
 import scipy.ndimage
 import random
+from scipy.ndimage import binary_dilation
 
 __all__ = [
     "normalize",
@@ -20,69 +21,52 @@ def normalize(image):
 
 
 def resample_3d_array_numpy(image_origin, image_noisy, new_shape, section_shape):
-    """
-       Resample a 3D array to a new shape using simple nearest neighbor interpolation and then
-       randomly select a section of the new shape.
-
-       Args:
-           image_origin (numpy.ndarray): The original image array.
-           image_noisy (numpy.ndarray): The noisy image array.
-           new_shape (tuple): The new shape for resampling.
-           section_shape (tuple): The shape of the section to be randomly selected.
-
-       Returns:
-           numpy.ndarray: The resampled and sectioned 3D arrays.
-       """
     new_H, new_W, new_D = new_shape
     section_H, section_W, section_D = section_shape
 
-    # Resample
-    H_orig, W_orig, D = image_origin.shape
-    # Compute the ratio for the height and width dimensions
-    ratio_h = H_orig / new_H
-    ratio_w = W_orig / new_H
-    # Create a new array with the desired shape
-    resampled_image_origin = np.zeros([D, new_H, new_W])
-    for d in range(D):
+    # Resample the original image
+    H_orig, W_orig, D_orig = image_origin.shape
+    ratio_h = (H_orig - 1) / (new_H - 1)
+    ratio_w = (W_orig - 1) / (new_W - 1)
+    ratio_d = (D_orig - 1) / (new_D - 1)
+    resampled_image_origin = np.zeros([new_D, new_H, new_W])
+    for d in range(new_D):
         for h in range(new_H):
             for w in range(new_W):
-                # Find the nearest neighbor indices
-                orig_h = min(int(h * ratio_h), H_orig - 1)
-                orig_w = min(int(w * ratio_w), W_orig - 1)
-                # Assign the value from the nearest neighbor
-                resampled_image_origin[d, h, w] = image_origin[orig_w, orig_h, d]
+                orig_h = min(int(round(h * ratio_h)), H_orig - 1)
+                orig_w = min(int(round(w * ratio_w)), W_orig - 1)
+                orig_d = min(int(round(d * ratio_d)), D_orig - 1)
+                resampled_image_origin[d, h, w] = image_origin[orig_h, orig_w, orig_d]
 
-    H_orig, W_orig, D = image_noisy.shape
-    # Compute the ratio for the height and width dimensions
-    ratio_h = H_orig / new_H
-    ratio_w = W_orig / new_H
-    # Create a new array with the desired shape
-    resampled_image_noisy = np.zeros([D, new_H, new_W])
-    for d in range(D):
+    # Resample the noisy image
+    H_orig, W_orig, D_orig = image_noisy.shape
+    ratio_h = (H_orig - 1) / (new_H - 1)
+    ratio_w = (W_orig - 1) / (new_W - 1)
+    ratio_d = (D_orig - 1) / (new_D - 1)
+    resampled_image_noisy = np.zeros([new_D, new_H, new_W])
+    for d in range(new_D):
         for h in range(new_H):
             for w in range(new_W):
-                # Find the nearest neighbor indices
-                orig_h = min(int(h * ratio_h), H_orig - 1)
-                orig_w = min(int(w * ratio_w), W_orig - 1)
-                # Assign the value from the nearest neighbor
-                resampled_image_noisy[d, h, w] = image_noisy[orig_h, orig_w, d]
+                orig_h = min(int(round(h * ratio_h)), H_orig - 1)
+                orig_w = min(int(round(w * ratio_w)), W_orig - 1)
+                orig_d = min(int(round(d * ratio_d)), D_orig - 1)
+                resampled_image_noisy[d, w, h] = image_noisy[orig_h, orig_w, orig_d]
 
-    # Randomly select a starting point for the section
-    start_h = random.randint(0, new_H - section_H)
-    start_w = random.randint(0, new_W - section_W)
-    start_d = random.randint(0, new_D - section_D)
+    # Select a random section from the resampled image
+    start_h = np.random.randint(0, new_H - section_H + 1)
+    start_w = np.random.randint(0, new_W - section_W + 1)
+    start_d = np.random.randint(0, new_D - section_D + 1)
 
-    # Extract the section from the resampled images
-    section_image_origin = resampled_image_origin[
-                           start_d:start_d + section_D,
-                           start_h:start_h + section_H,
-                           start_w:start_w + section_W]
-    section_image_noisy = resampled_image_noisy[
-                          start_d:start_d + section_D,
-                          start_h:start_h + section_H,
-                          start_w:start_w + section_W]
+    section_origin = resampled_image_origin[
+                     start_d:start_d + section_D,
+                     start_h:start_h + section_H,
+                     start_w:start_w + section_W]
+    section_noisy = resampled_image_noisy[
+                    start_d:start_d + section_D,
+                    start_h:start_h + section_H,
+                    start_w:start_w + section_W]
 
-    return section_image_origin, section_image_noisy
+    return section_origin, section_noisy
 
 
 def rearrange_3d_array_numpy(image_origin, image_noisy):
@@ -136,9 +120,9 @@ def resize_and_restore_images(image1, image2, factor_ranges):
     processed_image1 = resize_and_restore_single_image(image1, factors)
     processed_image2 = resize_and_restore_single_image(image2, factors)
 
-    # t = 0.5  # Replace with your threshold
-    # processed_image1 = (processed_image1 >= t).astype(np.int_)
-    # processed_image1 = (processed_image1 < t).astype(np.int_)
+    t = 0.5  # Replace with your threshold
+    processed_image1 = (processed_image1 >= t).astype(np.int_)
+    processed_image1 = (processed_image1 < t).astype(np.int_)
 
     return processed_image1, processed_image2
 
@@ -189,11 +173,42 @@ def crop_or_pad_3d_center(image, target_shape):
     return output
 
 
+def dilate_3d_array(array_3d, dilation_factors):
+    """
+    Dilate a 3D numpy array in three different directions with specified factors.
+
+    Args:
+    array_3d (numpy.ndarray): The input 3D array to be dilated.
+    dilation_factors (tuple): A tuple of three integers representing the dilation factors for each direction (z, y, x).
+
+    Returns:
+    numpy.ndarray: The dilated 3D array with values as 0 and 1.
+    """
+    # Create a structuring element based on dilation factors
+    structuring_element = np.ones(dilation_factors, dtype=bool)
+
+    # Apply dilation
+    dilated_array = binary_dilation(array_3d, structure=structuring_element)
+
+    # Convert boolean array to integer array (True to 1, False to 0)
+    dilated_array = dilated_array.astype(int)
+
+    return dilated_array
+
+
 if __name__ == "__main__":
     import dataset
     import os
     from torch.utils.data import DataLoader
     from visualization import visualize_sample
+
+    # Example usage
+    array_3d = np.random.randint(0, 2, (7, 7, 7))  # Example 3D array
+    dilation_factors = (2, 3, 1)  # Example dilation factors
+    dilated_array = dilate_3d_array(array_3d, dilation_factors)
+
+    print("Original Array:\n", array_3d)
+    print("Dilated Array - Original Array:\n", dilated_array - array_3d)
 
     # Get the directory of the current script
     current_script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -226,6 +241,6 @@ if __name__ == "__main__":
 
     print(processed_image1.shape)
     print(processed_image2.shape)
-
-    visualize_sample(processed_image1.squeeze(), processed_image2.squeeze(), slice_idx=(84, 8, 8))
-    visualize_sample(processed_image2.squeeze(), processed_image2.squeeze(), slice_idx=(128, 8, 8))
+    #
+    # visualize_sample(processed_image1.squeeze(), processed_image2.squeeze(), slice_idx=(84, 8, 8))
+    # visualize_sample(processed_image2.squeeze(), processed_image2.squeeze(), slice_idx=(128, 8, 8))
