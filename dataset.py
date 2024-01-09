@@ -73,8 +73,16 @@ class TrainValidImageDataset(Dataset):
 
         # print_statistics(image_origin, "Initial")
         # Assign 1 where the value is 7, and 0 otherwise in the 'image_origin' array
-        image_origin = np.where(image_origin == 7, 1, 0)
-        # print_statistics(image_origin, "After Condition Assignment")
+        # image_origin = np.where(image_origin == 7, 1, 0)
+        # Step 1: Find the index of the first 7 in the 3rd dimension
+        idx_of_7 = np.argmax(image_origin == 7, axis=2)
+        # Initialize a mask with all zeros
+        image_origin = np.zeros_like(image_origin, dtype=bool)
+        # Step 2: Set the positions greater than the index to True
+        for i in range(image_origin.shape[0]):
+            for j in range(image_origin.shape[1]):
+                image_origin[i, j, idx_of_7[i, j]:] = True
+
         # factor_ranges = ((0.8, 1.2),
         #                  (0.9, 1.1),
         #                  (0.9, 1.1))  # Ranges for the resize factors for each dimension
@@ -150,9 +158,18 @@ class TestDataset(Dataset):
         image_noisy = read_csv_to_3d_array(dataset_file)
         image_origin = read_csv_to_3d_array(label_file)
 
-        # print_statistics(image_origin, "Initial")
         # Assign 1 where the value is 7, and 0 otherwise in the 'image_origin' array
-        image_origin = np.where(image_origin == 7, 1, 0)
+        # image_origin = np.where(image_origin == 7, 1, 0)
+        # Step 1: Find the index of the first 7 in the 3rd dimension
+        idx_of_7 = np.argmax(image_origin == 7, axis=2)
+        # Initialize a mask with all zeros
+        image_origin = np.zeros_like(image_origin, dtype=bool)
+        # Step 2: Set the positions greater than the index to True
+        for i in range(image_origin.shape[0]):
+            for j in range(image_origin.shape[1]):
+                if idx_of_7[i, j] != 0:
+                    image_origin[i, j, idx_of_7[i, j]:] = True
+
         # # print_statistics(image_origin, "After Condition Assignment")
         # factor_ranges = ((0.8, 1.2),
         #                  (0.9, 1.1),
@@ -167,8 +184,8 @@ class TestDataset(Dataset):
                                                                     image_noisy,
                                                                     new_shape, section_shape)
 
-        dilation_factors = (20, 1, 1)  # Example dilation factors
-        image_origin = imgproc.dilate_3d_array(image_origin, dilation_factors)
+        # dilation_factors = (20, 1, 1)  # Example dilation factors
+        # image_origin = imgproc.dilate_3d_array(image_origin, dilation_factors)
 
         # print_statistics(image_origin, "After Rearranging 3D Array")
         # First Tensor: Location of Class 1 in terms of W and H
@@ -401,6 +418,7 @@ if __name__ == "__main__":
     # Set mode for testing
     os.environ['MODE'] = 'train'
     import config
+
     # from visualization import visualize_sample
 
     # ------------- visualize some samples
@@ -426,4 +444,3 @@ if __name__ == "__main__":
             continue
 
         plot_dual_orthoslices(gt.squeeze().numpy(), input.squeeze().numpy(), value=1)
-

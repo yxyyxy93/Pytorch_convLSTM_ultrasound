@@ -197,7 +197,7 @@ def load_dataset(num_folds=5) -> list:
 
 
 def build_model() -> [nn.Module, nn.Module]:
-    convLSTMmodel = vnet.__dict__[config.d_arch_name]
+    convLSTMmodel = vnet.__dict__[config.d_arch_name]()
 
     convLSTMmodel = convLSTMmodel.to(device=config.device)
 

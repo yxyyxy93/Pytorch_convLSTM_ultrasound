@@ -115,7 +115,7 @@ class DiceLoss(nn.Module):
 
     def forward(self, inputs, targets, smooth=1):
         # Apply sigmoid to the inputs
-        inputs = torch.sigmoid(inputs)
+        # inputs = torch.sigmoid(inputs)
 
         # Flatten label and prediction tensors
         inputs = inputs.reshape(-1)
