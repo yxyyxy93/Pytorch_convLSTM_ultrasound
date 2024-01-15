@@ -90,6 +90,7 @@ def main():
         scaler = amp.GradScaler(enabled=torch.cuda.is_available())
 
         # Initialize lists to store metrics for each epoch
+        lowest_val_loss = 1
         best_score = 0
         epoch_train_losses = []
         epoch_val_losses = []
@@ -136,12 +137,16 @@ def main():
             # Update LR
             scheduler.step()
 
-            # Automatically save the model with the highest index
-            is_best = avg_val_score > best_score
+             # Automatically save the model with the lowest validation loss
+            is_best = avg_val_loss < lowest_val_loss
             is_last = (epoch + 1) == config.epochs
-            best_score = max(avg_val_score, best_score)
+            if is_best:
+                lowest_val_loss = min(avg_val_loss, lowest_val_loss)
+                best_score = avg_val_score
+
             save_checkpoint({"epoch": epoch + 1,
                              "best_score": best_score,
+                             "best_loss": lowest_val_loss,
                              "state_dict": model.state_dict(),
                              "ema_state_dict": ema_model.state_dict(),
                              "optimizer": optimizer.state_dict(),
@@ -183,7 +188,7 @@ def load_dataset(num_folds=5) -> list:
         train_loader = DataLoader(train_subset, batch_size=config.batch_size, shuffle=True,
                                   num_workers=config.num_workers, pin_memory=True, drop_last=True,
                                   persistent_workers=True)
-        val_loader = DataLoader(val_subset, batch_size=1, shuffle=False, num_workers=config.num_workers,
+        val_loader = DataLoader(val_subset, batch_size=config.batch_size, shuffle=False, num_workers=config.num_workers,
                                 pin_memory=True, drop_last=True, persistent_workers=True)
         # Now you can check if 'device' is set to "cpu"
         if config.device == torch.device("cpu"):
